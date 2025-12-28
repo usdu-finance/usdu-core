@@ -39,7 +39,7 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	// ---------------------------------------------------------------------------------------
 
 	error ImbalancedVariant(uint256[] balances);
-	error NotProfitable();
+	error NotProfitable(uint256 given, uint256 minimum);
 	error ZeroAmount();
 	error NothingToReconcile(uint256 assets, uint256 minted);
 
@@ -66,11 +66,10 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	// ---------------------------------------------------------------------------------------
 
 	function totalAssets() public view returns (uint256) {
-		uint256 bal = stable.balanceOf(address(this));
 		uint256 adapterLP = pool.balanceOf(address(this));
-		if (adapterLP == 0) return bal; // bal might be zero as well
+		if (adapterLP == 0) return 0;
 
-		return bal + (adapterLP * pool.get_virtual_price()) / 1 ether;
+		return (adapterLP * pool.get_virtual_price()) / 1 ether;
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -127,7 +126,7 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 
 	// ---------------------------------------------------------------------------------------
 
-	function calcBurnable(uint256 beforeLP, uint256 afterLP, uint256 split) public view returns (uint256) {
+	function calcBurnable(uint256 beforeLP, uint256 afterLP) public view returns (uint256) {
 		// scaled to 1e18
 		uint256 calcBurnableRatio = (1 ether - ((afterLP * 1 ether) / beforeLP));
 
@@ -138,9 +137,6 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	// ---------------------------------------------------------------------------------------
 
 	function removeLiquidity(uint256 shares, uint256 minAmount) external returns (uint256) {
-		// reconcile, if LP price increased, allow passing
-		_reconcile(totalAssets(), true);
-
 		// store LP balance
 		uint256 beforeLP = pool.balanceOf(address(this));
 
@@ -155,19 +151,33 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 
 		// get burnable amount form LP balance reduction
 		uint256 afterLP = pool.balanceOf(address(this));
-		uint256 toBurn = calcBurnable(beforeLP, afterLP, split);
-
-		// verify if in profit
-		if (split < toBurn) revert NotProfitable();
-
-		// reduce mint
-		_reduceMint(toBurn);
+		uint256 toBurn = calcBurnable(beforeLP, afterLP);
 
 		// transfer split to sender
 		stable.transfer(_msgSender(), split);
 
+		// use remaining balance, eliminate rounding issues
+		uint256 remaining = stable.balanceOf(address(this));
+
+		// verify in profit
+		if (remaining < toBurn) revert NotProfitable(remaining, toBurn);
+
+		// reduce mint
+		uint256 reduced = _reduceMint(toBurn);
+
+		// check for profit > 0, includes also various extra profits
+		if (remaining > reduced) {
+			uint256 extraProfit = remaining - reduced;
+			totalRevenue += extraProfit;
+
+			emit Revenue(extraProfit, totalRevenue, totalMinted);
+
+			// distribute balance
+			_distribute();
+		}
+
 		// emit event and return share portion
-		emit RemoveLiquidity(_msgSender(), toBurn, totalMinted, shares, afterLP);
+		emit RemoveLiquidity(_msgSender(), reduced, totalMinted, shares, afterLP);
 		return split;
 	}
 
@@ -177,6 +187,9 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	function redeem(uint256 shares, uint256 minAmount) external onlyCurator {
 		pool.remove_liquidity_one_coin(shares, int128(int256(idxS)), minAmount);
 		_reduceMint(stable.balanceOf(address(this)));
+
+		// optional distribute remainings
+		_distribute();
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -185,30 +198,30 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	function reduceMint(uint256 amount) external {
 		stable.safeTransferFrom(_msgSender(), address(this), amount);
 		_reduceMint(stable.balanceOf(address(this)));
+
+		// optional distribute remainings
+		_distribute();
 	}
 
 	function _reduceMint(uint256 amount) internal returns (uint256) {
 		// dont allow zero amount
 		if (amount == 0) revert ZeroAmount();
 
+		// reduce max. the totalMinted amount
 		uint256 reduce = totalMinted <= amount ? totalMinted : amount;
 
-		if (totalMinted <= amount) {
-			if (totalMinted != 0) {
-				stable.burn(totalMinted);
-				totalMinted = 0;
-			}
-
-			// distribute remainings
-			_distribute();
-
-			return reduce;
+		// burn all or partially
+		if (totalMinted == reduce) {
+			stable.burn(totalMinted);
+			totalMinted = 0;
 		} else {
-			// fallback, burn and reduce totalMinted
+			// fallback, burn partially
 			stable.burn(reduce);
 			totalMinted -= reduce;
-			return reduce;
 		}
+
+		// return reduction
+		return reduce;
 	}
 
 	// ---------------------------------------------------------------------------------------
