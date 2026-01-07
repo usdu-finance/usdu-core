@@ -48,10 +48,13 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	/// @notice Cumulative revenue generated and distributed by the adapter
 	uint256 public totalRevenue;
 
-
 	/// @notice Block number of the last reconcile operation
 	/// @dev Enforces a 50,000 block cooldown (~7 days) between reconcile operations to prevent profit manipulation
 	uint256 public latestReconcile = 0;
+
+	/// @notice Maximum allowed imbalance deviation (e.g., 0.2 ether = 20%)
+	/// @dev When pool imbalance is below this threshold, adapter operations are blocked to allow free market
+	uint256 public maxImbalanceThreshold = 0.2 ether;
 
 	// ---------------------------------------------------------------------------------------
 	// EVENTS
@@ -100,12 +103,15 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	/// @param minted Current adapter liabilities (minted debt)
 	error NothingToReconcile(uint256 assets, uint256 minted);
 
-
 	/// @notice Thrown when attempting reconcile operation before the 50,000 block cooldown period expires
 	error ReconcileGuardError();
 
-	// ---------------------------------------------------------------------------------------
+	/// @notice Thrown when pool imbalance is within threshold and adapter operations are blocked
+	/// @param currentDeviation Current pool imbalance deviation
+	/// @param maxAllowed Maximum allowed deviation threshold
+	error ImbalanceWithinThreshold(uint256 currentDeviation, uint256 maxAllowed);
 
+	// ---------------------------------------------------------------------------------------
 
 	/**
 	 * @notice Enforces a 50,000 block cooldown period between reconcile operations
@@ -151,6 +157,19 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	}
 
 	// ---------------------------------------------------------------------------------------
+	// CONFIGURATION
+	// ---------------------------------------------------------------------------------------
+
+	/**
+	 * @notice Updates the maximum imbalance threshold for adapter operations
+	 * @param threshold New threshold value (e.g., 0.2 ether = 20%)
+	 * @dev Only curator can adjust this parameter to control when adapter intervenes in market
+	 */
+	function setMaxImbalanceThreshold(uint256 threshold) external onlyCurator {
+		maxImbalanceThreshold = threshold;
+	}
+
+	// ---------------------------------------------------------------------------------------
 	// ASSET VALUATION
 	// ---------------------------------------------------------------------------------------
 
@@ -180,21 +199,37 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	 * @dev Normalizes coin balance to 18 decimals for proper comparison.
 	 *      When true, adding both tokens simultaneously should be profitable.
 	 */
-	function checkImbalance() public view returns (bool) {
+	function checkImbalance() public view returns (uint256, uint256, uint256) {
 		// Normalize coin balance to 18 decimals for comparison
-		uint256 correctedAmount = (pool.balances(idxC) * 1 ether) / 10 ** coin.decimals();
+		uint256 coinAmount = (pool.balances(idxC) * 1 ether) / 10 ** coin.decimals();
+		uint256 stableAmount = pool.balances(idxS);
+		uint256 halfAmount = (coinAmount + stableAmount) / 2;
 
-		// Pool is favorable when stablecoin balance is less than or equal to coin balance
-		return pool.balances(idxS) <= correctedAmount;
+		if (stableAmount <= coinAmount) {
+			return (idxS, coinAmount - stableAmount, 1 ether - (stableAmount * 1 ether) / halfAmount);
+		} else {
+			return (idxC, stableAmount - coinAmount, 1 ether - (coinAmount * 1 ether) / halfAmount);
+		}
 	}
 
 	/**
-	 * @notice Verifies that the pool imbalance state matches the expected condition
+	 * @notice Verifies that the pool imbalance state matches the expected condition and exceeds threshold
 	 * @param state Expected imbalance state (true = coin-heavy, false = stablecoin-heavy)
-	 * @dev Reverts with current pool balances if the state doesn't match expectation
+	 * @dev Reverts if state doesn't match or if imbalance is below threshold (allowing free market)
 	 */
 	function verifyImbalance(bool state) public view {
-		if (checkImbalance() != state) revert ImbalancedVariant(pool.get_balances());
+		(uint256 deficientIndex, , uint256 deviation) = checkImbalance();
+		
+		// Check if deviation is below threshold - if so, block adapter operations
+		if (deviation < maxImbalanceThreshold) {
+			revert ImbalanceWithinThreshold(deviation, maxImbalanceThreshold);
+		}
+		
+		// Verify the expected imbalance state matches actual state
+		bool actualState = (deficientIndex == idxS); // true if stablecoin is deficient (coin-heavy)
+		if (actualState != state) {
+			revert ImbalancedVariant(pool.get_balances());
+		}
 	}
 
 	// ---------------------------------------------------------------------------------------
