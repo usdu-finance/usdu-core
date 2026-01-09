@@ -1,4 +1,4 @@
-export const VetoMultiSig_ABI = [
+export const AragonVetoMultiSig_ABI = [
 	{
 		inputs: [
 			{ internalType: 'uint16', name: 'limit', type: 'uint16' },

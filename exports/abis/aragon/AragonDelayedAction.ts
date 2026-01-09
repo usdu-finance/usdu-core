@@ -1,4 +1,4 @@
-export const StagedProposalProcessor_ABI = [
+export const AragonDelayedAction_ABI = [
 	{ inputs: [], name: 'AlreadyInitialized', type: 'error' },
 	{ inputs: [{ internalType: 'address', name: 'body', type: 'address' }], name: 'BodyResultTypeNotSet', type: 'error' },
 	{

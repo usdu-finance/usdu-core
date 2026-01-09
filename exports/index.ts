@@ -6,9 +6,9 @@ export * from './address.config';
 export * from './address.types';
 
 // aragon abis
-export * from './abis/aragon/MultiSig';
-export * from './abis/aragon/StagedProposalProcessor';
-export * from './abis/aragon/VetoMultiSig';
+export * from './abis/aragon/AragonMultiSig';
+export * from './abis/aragon/AragonDelayedAction';
+export * from './abis/aragon/AragonVetoMultiSig';
 
 // curve abis
 export * from './abis/curve/CurveAdapterV1';

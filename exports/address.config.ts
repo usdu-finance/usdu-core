@@ -10,6 +10,9 @@ export const ADDRESS: ChainAddressMap = {
 
 		// curator / DAO
 		curator: '0x9fe66037c44236c87D9Ac8345F489b4413fDFf06',
+		aragonMultiSig: '0x369C21c8cB56C0211772F003c917b2807204BB4D',
+		aragonDelayedAction: '0x8E8Bec995809bF29712C89149603a8C48329aF51',
+		aragonVetoMultiSig: '0xF786531776903BaE94A1A4f4F17a0233dca5f9d5',
 
 		// deployer and stable
 		usduDeployer: '0x745211a1e1a58b2b11b932855b30d411c31e25d5',

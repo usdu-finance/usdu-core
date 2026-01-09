@@ -1,4 +1,4 @@
-export const MultiSig_ABI = [
+export const AragonMultiSig_ABI = [
 	{
 		inputs: [
 			{ internalType: 'uint16', name: 'limit', type: 'uint16' },
