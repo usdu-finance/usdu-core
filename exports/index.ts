@@ -5,6 +5,11 @@ export * from '../helper/wallet';
 export * from './address.config';
 export * from './address.types';
 
+// aragon abis
+export * from './abis/aragon/MultiSig';
+export * from './abis/aragon/StagedProposalProcessor';
+export * from './abis/aragon/VetoMultiSig';
+
 // curve abis
 export * from './abis/curve/CurveAdapterV1';
 export * from './abis/curve/CurveAdapterV1_1';
