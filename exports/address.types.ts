@@ -66,7 +66,9 @@ export type ChainAddressMainnet = {
 	termmaxVaultUSDU_Yield: Address;
 
 	// term-max adapters
-	termmaxVaultAdapterRecoverV1: Address;
+	termmaxVaultAdapterRecoverV1_Core: Address;
+	termmaxVaultAdapterRecoverV1_RWA: Address;
+	termmaxVaultAdapterRecoverV1_Yield: Address;
 
 	// erc20 tokens
 	usdc: Address;
