@@ -2,14 +2,14 @@
 	"name": "@usdu-core/usdu-core",
 	"version": "0.0.1",
 	"private": false,
-	"license": "MIT",
+	"license": "GPL-3.0 license",
 	"main": "./dist/index.js",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.ts",
-	"author": "samclassix <samclassix@proton.me>, wrytlabs <wrytlabs@proton.me>",
+	"author": "samclassix <samclassix@proton.me>",
 	"description": "Core implementation",
 	"directories": {
-		"doc": "docs",
+		"docs": "docs",
 		"test": "tests"
 	},
 	"scripts": {

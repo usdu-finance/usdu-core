@@ -1,0 +1,20 @@
+export const IMorphoSupplyCallback_ABI = [
+	{
+		inputs: [
+			{
+				internalType: 'uint256',
+				name: 'assets',
+				type: 'uint256',
+			},
+			{
+				internalType: 'bytes',
+				name: 'data',
+				type: 'bytes',
+			},
+		],
+		name: 'onMorphoSupply',
+		outputs: [],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+] as const;
