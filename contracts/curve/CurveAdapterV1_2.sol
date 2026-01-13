@@ -359,38 +359,42 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	/**
 	 * @notice Enables users to remove liquidity when conditions are profitable
 	 * @param shares Amount of LP tokens to redeem
-	 * @param minAmount Minimum stablecoin amount expected (slippage protection)
-	 * @return Amount of stablecoins received by the user
+	 * @param minAmounts Minimum amounts expected for each token [token0, token1] (slippage protection)
+	 * @return Array of amounts received by the user [token0Amount, token1Amount]
 	 * @dev Enforces profitability check and imbalance verification.
 	 */
-	function removeLiquidity(uint256 shares, uint256 minAmount) external returns (uint256) {
-		return _removeLiquidity(shares, minAmount, true);
+	function removeLiquidity(uint256 shares, uint256[] memory minAmounts) external returns (uint256[] memory) {
+		return _removeLiquidity(shares, minAmounts, true);
 	}
 
 	/**
 	 * @notice Emergency function allowing curator to redeem liquidity with debt coverage
 	 * @param amountToTransfer Stablecoin amount curator provides to cover potential shortfall
 	 * @param shares LP tokens to redeem from adapter's holdings
-	 * @param minAmount Minimum stablecoin amount expected from redemption
-	 * @return Amount redeemed (not returned to curator since this is emergency management)
+	 * @param minAmounts Minimum amounts expected for each token [token0, token1] (slippage protection)
+	 * @return Array of amounts redeemed [token0Amount, token1Amount] (not returned to curator since this is emergency management)
 	 * @dev Bypasses imbalance checks since curator is providing debt coverage
 	 */
-	function redeemLiquidity(uint256 amountToTransfer, uint256 shares, uint256 minAmount) external onlyCurator returns (uint256) {
+	function redeemLiquidity(
+		uint256 amountToTransfer,
+		uint256 shares,
+		uint256[] memory minAmounts
+	) external onlyCurator returns (uint256[] memory) {
 		if (amountToTransfer != 0) {
 			// Curator provides stablecoins to cover any potential debt shortfall
 			stable.safeTransferFrom(_msgSender(), address(this), amountToTransfer);
 		}
-		return _removeLiquidity(shares, minAmount, false);
+		return _removeLiquidity(shares, minAmounts, false);
 	}
 
 	/**
 	 * @dev Internal function handling both user and curator liquidity removal
 	 * @param shares LP tokens to remove
-	 * @param minAmount Minimum amount expected from removal
+	 * @param minAmounts Minimum amounts expected for each token [token0, token1] (slippage protection)
 	 * @param toSplit true for user operations (with checks), false for curator emergency
-	 * @return split How much got split with the user
+	 * @return withdrawn Array of amounts received/redeemed [token0Amount, token1Amount]
 	 */
-	function _removeLiquidity(uint256 shares, uint256 minAmount, bool toSplit) internal returns (uint256 split) {
+	function _removeLiquidity(uint256 shares, uint256[] memory minAmounts, bool toSplit) internal returns (uint256[] memory withdrawn) {
 		// Record LP balance before operation for debt calculation
 		uint256 beforeLP = pool.balanceOf(address(this));
 
@@ -398,27 +402,33 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 			// User operation: transfer user's LP tokens and give them half the withdrawn amount
 			pool.transferFrom(_msgSender(), address(this), shares);
 
-			// TODO: optimize and test this part further
-			// Withdraw double the user's LP tokens as stablecoins, give user half
-			// split = pool.remove_liquidity_one_coin(shares * 2, int128(int256(idxS)), minAmount * 2) / 2;
+			// Scale minAmounts by 2x since we're withdrawing double the user's LP tokens
+			minAmounts[0] *= 2;
+			minAmounts[1] *= 2;
 
-			(uint256 out0, uint256 out1) = pool.remove_liquidity(shares * 2, [0, 0]); // withdraw balanced
-			pool.exchange(idxC, idxS, idxC == 0 ? out0 / 2 : out1 / 2); // exchange the half of foreign coin
+			// Remove balanced liquidity using double the user's LP tokens
+			withdrawn = pool.remove_liquidity(shares * 2, minAmounts);
 
-			// Verify pool stays stablecoin-heavy (favorable for withdrawal)
+			// Exchange half of the foreign coin to stablecoin to increase debt coverage
+			// This conversion helps maintain the pool's stablecoin-heavy state
+			pool.exchange(int128(uint128(idxC)), int128(uint128(idxS)), withdrawn[idxC] / 2, 0);
+
+			// Verify pool remains stablecoin-heavy (favorable for withdrawal)
 			verifyImbalance(false);
 
-			// reuse/overwrite vars
-			// transfer all remaining foreign coins, eliminate roundings and dust left behind
-			out0 = idxS == 0 ? out0 / 2 : coin.balanceOf(address(this));
-			out1 = idxS == 0 ? coin.balanceOf(address(this)) : out1 / 2;
+			// Reuse withdrawn array to store user's final balances
+			// User gets: half of withdrawn stablecoins + all remaining foreign coins
+			// Adapter retains: half of stablecoins + exchanged amount (for debt burning)
+			withdrawn[idxS] = withdrawn[idxS] / 2;
+			withdrawn[idxC] = coin.balanceOf(address(this)); // Captures all remaining after exchange
 
-			// Transfer user's portion of stables
-			stable.transfer(_msgSender(), idxS == 0 ? out0 : out1);
-			coin.transfer(_msgSender(), idxS == 0 ? out1 : out1);
+			// Transfer user's portion
+			stable.transfer(_msgSender(), withdrawn[idxS]);
+			coin.transfer(_msgSender(), withdrawn[idxC]);
 		} else {
-			// Curator emergency: redeem adapter's LP tokens directly
-			pool.remove_liquidity_one_coin(shares, int128(int256(idxS)), minAmount);
+			// Curator emergency: redeem adapter's LP tokens directly as single coin
+			withdrawn = new uint256[](2);
+			withdrawn[idxS] = pool.remove_liquidity_one_coin(shares, int128(int256(idxS)), minAmounts[idxS]);
 		}
 
 		// Calculate debt to burn based on LP reduction
