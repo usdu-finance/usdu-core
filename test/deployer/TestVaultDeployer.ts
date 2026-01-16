@@ -1,8 +1,16 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
-import { IMetaMorphoV1_1, IMetaMorphoV1_1Factory, IMorpho, MorphoAdapterV1, RewardRouterV1, Stablecoin, VaultDeployer } from '../typechain';
+import {
+	IMetaMorphoV1_1,
+	IMetaMorphoV1_1Factory,
+	IMorpho,
+	MorphoAdapterV1,
+	RewardRouterV0,
+	Stablecoin,
+	VaultDeployer,
+} from '../../typechain';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { ADDRESS } from '../exports/address.config';
+import { ADDRESS } from '../../exports/address.config';
 import { mainnet } from 'viem/chains';
 import { parseEther } from 'viem';
 
@@ -13,7 +21,7 @@ describe('Deploy VaultDeployer', function () {
 	let core: IMetaMorphoV1_1;
 	let staked: IMetaMorphoV1_1;
 	let adapter: MorphoAdapterV1;
-	let reward: RewardRouterV1;
+	let reward: RewardRouterV0;
 
 	let curator: SignerWithAddress;
 	let guardian: SignerWithAddress;
@@ -38,7 +46,7 @@ describe('Deploy VaultDeployer', function () {
 		staked = await ethers.getContractAt('IMetaMorphoV1_1', await vaultDeployer.staked());
 
 		adapter = await ethers.getContractAt('MorphoAdapterV1', await vaultDeployer.adapter());
-		reward = await ethers.getContractAt('RewardRouterV1', await vaultDeployer.reward());
+		reward = await ethers.getContractAt('RewardRouterV0', await vaultDeployer.reward());
 	});
 
 	describe('Deployment Sequence and Checks', function () {

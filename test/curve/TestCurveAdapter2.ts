@@ -1,16 +1,16 @@
 import { expect } from 'chai';
 import { ethers, network } from 'hardhat';
-import { CurveAdapterV1, Stablecoin, ICurveStableSwapNG, IERC20, CurveAdapterV1_1 } from '../typechain';
+import { CurveAdapterV1, Stablecoin, ICurveStableSwapNG, IERC20 } from '../../typechain';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
 import { formatUnits, parseEther, parseUnits, zeroAddress } from 'viem';
-import { ADDRESS } from '../exports/address.config';
+import { ADDRESS } from '../../exports/address.config';
 import { mainnet } from 'viem/chains';
-import { evm_increaseTime } from './helper';
+import { evm_increaseTime } from '../helper';
 
 const addr = ADDRESS[mainnet.id];
 
-describe('CurveAdapterV1_1: Liquidity Test', function () {
-	let adapter: CurveAdapterV1_1;
+describe('CurveAdapterV1: Liquidity Test', function () {
+	let adapter: CurveAdapterV1;
 	let stable: Stablecoin;
 	let usdc: IERC20;
 	let pool: ICurveStableSwapNG;
@@ -26,8 +26,8 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 	const USDC_TOKEN = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 	const USDC_HOLDER = '0x55fe002aeff02f77364de339a1292923a15844b8';
 	const EXPIRED_AT = 999999999999n;
-	const SMALL_AMOUNT = '1000';
-	const LARGE_AMOUNT = '10000';
+	const SMALL_AMOUNT = '10000';
+	const LARGE_AMOUNT = '100000';
 
 	const showDetails = async () => {
 		console.log('\n=== Balances ===');
@@ -57,17 +57,11 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 		// Attach contracts
 		stable = await ethers.getContractAt('Stablecoin', addr.usduStable);
 		usdc = await ethers.getContractAt('IERC20', USDC_TOKEN);
-		pool = await ethers.getContractAt('ICurveStableSwapNG', addr.curveStableSwapNG_USDUUSDC_2);
+		pool = await ethers.getContractAt('ICurveStableSwapNG', addr.curveStableSwapNG_USDUUSDC);
 
 		// Deploy CurveAdapter
-		const AdapterFactory = await ethers.getContractFactory('CurveAdapterV1_1');
-		adapter = await AdapterFactory.deploy(
-			addr.curveStableSwapNG_USDUUSDC_2,
-			1,
-			0,
-			[curator.address, zeroAddress, zeroAddress, zeroAddress, zeroAddress],
-			[1000, 0, 0, 0, 0]
-		);
+		const AdapterFactory = await ethers.getContractFactory('CurveAdapterV1');
+		adapter = await AdapterFactory.deploy(addr.curveStableSwapNG_USDUUSDC, 0, 1);
 
 		// Fund curator
 		await module.sendTransaction({ to: curator.address, value: parseEther('10') });
@@ -99,27 +93,29 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 
 			await pool
 				.connect(curator)
-				['add_liquidity(uint256[],uint256)']([parseUnits(LARGE_AMOUNT, 6), parseUnits(LARGE_AMOUNT, 18)], 0n);
+				['add_liquidity(uint256[],uint256)']([parseUnits(LARGE_AMOUNT, 18), parseUnits(LARGE_AMOUNT, 6)], 0n);
 
 			await showDetails();
 		});
 
 		it('should roughly balance the pool', async () => {
 			const balances = await pool.get_balances();
-			const amountCorrected = (balances[0] * parseEther('1')) / parseUnits('1', 6);
-			if (balances[1] > amountCorrected) {
+			const amountCorrected = (balances[1] * parseEther('1')) / parseUnits('1', 6);
+
+			if (balances[0] > amountCorrected) {
 				// usdc is missing
-				const missing = balances[1] - amountCorrected;
+				const missing = balances[0] - amountCorrected;
 				await usdc.connect(usdcUser).transfer(curator.address, formatUnits(missing, 18 - 6));
 				await usdc.connect(curator).approve(pool, formatUnits(missing, 18 - 6));
-				await pool.connect(curator)['add_liquidity(uint256[],uint256)']([BigInt(formatUnits(missing, 18 - 6)), 0n], 0n);
-			} else if (amountCorrected > balances[1]) {
+				await pool.connect(curator)['add_liquidity(uint256[],uint256)']([0n, BigInt(formatUnits(missing, 18 - 6))], 0n);
+			} else if (amountCorrected > balances[0]) {
 				// usdu is missing
-				const missing = amountCorrected - balances[1];
+				const missing = amountCorrected - balances[0];
 				await stable.connect(module).mintModule(curator.address, missing);
 				await stable.connect(curator).approve(pool, missing);
-				await pool.connect(curator)['add_liquidity(uint256[],uint256)']([0n, missing], 0n);
+				await pool.connect(curator)['add_liquidity(uint256[],uint256)']([missing, 0n], 0n);
 			}
+
 			await showDetails();
 		});
 	});
@@ -129,7 +125,7 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 			const amount = parseUnits(SMALL_AMOUNT, 18);
 			await stable.connect(module).mintModule(curator.address, amount);
 			await stable.connect(curator).approve(pool, amount);
-			await pool.connect(curator)['add_liquidity(uint256[],uint256)']([0n, amount], 0n);
+			await pool.connect(curator)['add_liquidity(uint256[],uint256)']([amount, 0n], 0n);
 
 			await showDetails();
 		});
@@ -148,7 +144,7 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 			const amount = parseUnits(SMALL_AMOUNT, 6) * 2n;
 			await usdc.connect(usdcUser).transfer(curator.address, amount);
 			await usdc.connect(curator).approve(pool, amount);
-			await pool.connect(curator)['add_liquidity(uint256[],uint256)']([amount, 0n], 0n);
+			await pool.connect(curator)['add_liquidity(uint256[],uint256)']([0n, amount], 0n);
 
 			await showDetails();
 		});
@@ -165,7 +161,7 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 		it('calculate IL after redeemtion of all LP shares', async () => {
 			const beforeLP = await pool.balanceOf(adapter);
 			const afterLP = 0n;
-			const projected = await pool.calc_withdraw_one_coin(beforeLP, 1);
+			const projected = await pool.calc_withdraw_one_coin(beforeLP, 0);
 
 			const profit = await adapter.calcProfitability(beforeLP, afterLP, projected);
 			expect(profit).to.be.equal(0n);
@@ -190,7 +186,7 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 			const amount = parseUnits(SMALL_AMOUNT, 18) * 4n;
 			await stable.connect(module).mintModule(curator.address, amount);
 			await stable.connect(curator).approve(pool, amount);
-			await pool.connect(curator)['add_liquidity(uint256[],uint256)']([0n, amount], 0n);
+			await pool.connect(curator)['add_liquidity(uint256[],uint256)']([amount, 0n], 0n);
 
 			await showDetails();
 		});
@@ -211,11 +207,11 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 			for (let i = 0; i < 10; i++) {
 				const usdcBal = await usdc.balanceOf(curator.address);
 				await usdc.connect(curator).approve(pool, usdcBal);
-				await pool.connect(curator)['exchange(int128,int128,uint256,uint256)'](0n, 1n, usdcBal, 0n);
+				await pool.connect(curator)['exchange(int128,int128,uint256,uint256)'](1n, 0n, usdcBal, 0n);
 
 				const stableBal = await stable.balanceOf(curator.address);
 				await stable.connect(curator).approve(pool, stableBal);
-				await pool.connect(curator)['exchange(int128,int128,uint256,uint256)'](1n, 0n, stableBal, 0n);
+				await pool.connect(curator)['exchange(int128,int128,uint256,uint256)'](0n, 1n, stableBal, 0n);
 			}
 
 			await showDetails();
@@ -225,7 +221,7 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 			const lpBalance = await pool.balanceOf(user);
 			const removeAmount = lpBalance / 4n;
 
-			console.log(await pool.calc_withdraw_one_coin(lpBalance, 1));
+			console.log(await pool.calc_withdraw_one_coin(lpBalance, 0));
 
 			await pool.connect(user).approve(adapter, removeAmount);
 			await adapter.connect(user).removeLiquidity(removeAmount, 0);
@@ -238,7 +234,7 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 			const removeAmount = initialLP;
 
 			await pool.connect(user).approve(adapter, removeAmount);
-			const projected = (await pool.calc_withdraw_one_coin(removeAmount * 2n, 1n)) / 2n;
+			const projected = (await pool.calc_withdraw_one_coin(removeAmount * 2n, 0n)) / 2n;
 			const revenue = await adapter.totalRevenue();
 			const profit = await adapter.calcProfitability(initialLP, initialLP - removeAmount, projected);
 			await adapter.connect(user).removeLiquidity(removeAmount, 0n);
@@ -248,17 +244,12 @@ describe('CurveAdapterV1_1: Liquidity Test', function () {
 		});
 
 		it('should distrubute earning', async () => {
-			// contribution
-			const contribute = parseUnits('2000', 6);
-			const contribute18 = parseUnits('1100', 18);
-			await usdc.connect(usdcUser).transfer(user, contribute);
-			await stable.connect(module).mintModule(user, contribute18);
-			await stable.connect(module).mintModule(adapter, contribute18);
-			await usdc.connect(user).approve(pool, contribute);
-			await stable.connect(user).approve(pool, contribute18);
-			await pool.connect(user)['add_liquidity(uint256[],uint256)']([contribute, contribute18], 0n);
+			await adapter
+				.connect(curator)
+				.setDistribution([rec0.address, rec1.address, zeroAddress, zeroAddress, zeroAddress], [800000n, 200000n, 0n, 0n, 0n]);
 
-			await adapter.connect(curator).payOffDebt();
+			// await adapter.connect(curator).payOffDebt();
+			await adapter.connect(curator).redeem(await pool.balanceOf(await adapter.getAddress()), 0n);
 			await showDetails();
 		});
 	});

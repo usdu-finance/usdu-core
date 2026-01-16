@@ -1,10 +1,10 @@
 import { expect } from 'chai';
 import { ethers, network } from 'hardhat';
-import { CurveAdapterV1, ICurveStableSwapNG, IERC20, Stablecoin } from '../typechain';
+import { CurveAdapterV1, ICurveStableSwapNG, IERC20, Stablecoin } from '../../typechain';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { evm_increaseTime } from './helper';
+import { evm_increaseTime } from '../helper';
 import { parseEther, parseUnits, zeroAddress } from 'viem';
-import { ADDRESS } from '../exports/address.config';
+import { ADDRESS } from '../../exports/address.config';
 import { mainnet } from 'viem/chains';
 
 const addr = ADDRESS[mainnet.id];
