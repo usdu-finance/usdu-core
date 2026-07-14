@@ -5,8 +5,8 @@ import { Address, zeroAddress } from 'viem';
 import { mainnet } from 'viem/chains';
 
 // config and select
-export const NAME: string = 'CurveAdapterV1_1'; // <-- select smart contract
-export const FILE: string = 'CurveAdapterV1_1'; // <-- name exported file
+export const NAME: string = 'CurveAdapterV1_2'; // <-- select smart contract
+export const FILE: string = 'CurveAdapterV1_2'; // <-- name exported file
 export const MOD: string = NAME + 'Module';
 console.log(NAME);
 
@@ -20,7 +20,7 @@ export type DeploymentParams = {
 };
 
 export const params: DeploymentParams = {
-	pool: ADDRESS[mainnet.id].curveStableSwapNG_USDUUSDC_2,
+	pool: ADDRESS[mainnet.id].curveStableSwapNG_USDCUSDU,
 	idxS: 1,
 	idxC: 0,
 	receivers: [ADDRESS[mainnet.id].curator, zeroAddress, zeroAddress, zeroAddress, zeroAddress],
