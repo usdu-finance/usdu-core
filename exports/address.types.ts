@@ -50,65 +50,20 @@ export type ChainAddressMainnet = {
 	chainId: typeof mainnet.id;
 	chainSelector: string;
 
-	// curator
+	// curator / DAO
 	curator: Address;
 	aragonDao: Address;
 	aragonMultiSig: Address;
-	aragonVetoMultiSig: Address;
 	aragonDelayedAction: Address;
+	aragonVetoMultiSig: Address;
 
-	// morpho related
-	morphoBlue: Address;
-	morphoIrm: Address;
-	morphoChainlinkOracleV2Factory: Address;
-	morphoMetaMorphoFactory1_1: Address;
-	morphoPublicAllocator: Address;
-	morphoURD: Address;
-
-	// USDU related
+	// deployer and stable
 	usduDeployer: Address;
 	usduStable: Address;
-	usduCoreVault: Address;
-	usduStakedVault: Address;
-	usduRewardRouterV0: Address;
-	usduMorphoAdapterV1: Address;
-	usduMorphoAdapterV1_1: Address;
-	usduMorphoAdapterV1_2: Address;
-	usduCurveAdapterV1_USDC: Address;
-	usduCurveAdapterV1_1_USDC: Address;
-	usduCurveAdapterV1_1_USDC_2: Address;
-
-	// core vault market ids
-	marketIdUSDUIdle: Address;
-	marketIdUSDUUSDC: Address;
-	marketIdUSDUWETH: Address;
-	marketIdUSDUCBBTC: Address;
-	marketIdUSDUCurveLPUSDC: Address;
-
-	// cross market ids
-	marketIdUSDCUSDU: Address;
-	marketIdUSDCSUSDU: Address;
 
 	// curve pools
-	curveStableSwapNG_USDUUSDC: Address;
-	curveStableSwapNG_USDUUSDC_2: Address;
-	curveStableSwapNG_USDUUSDC_LP_PriceAdapter: Address;
-	curveStableSwapNG_USDUUSDC_LP_PriceOracle: Address;
-
-	// term-max vaults
-	termmaxVaultUSDU_Core: Address;
-	termmaxVaultUSDU_RWA: Address;
-	termmaxVaultUSDU_Yield: Address;
-
-	// term-max adapters
-	termmaxVaultAdapterRecoverV1_Core: Address;
-	termmaxVaultAdapterRecoverV1_RWA: Address;
-	termmaxVaultAdapterRecoverV1_Yield: Address;
-
-	// erc20 tokens
-	usdc: Address;
-	WETH: Address;
-	cbBTC: Address;
+	curveStableSwapNG_USDCUSDU: Address;
+	curveStableSwapNG_USDCUSDU_gauge: Address;
 };
 
 export type ChainAddressPolygon = {
