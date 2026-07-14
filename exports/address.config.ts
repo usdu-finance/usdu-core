@@ -1,4 +1,4 @@
-import { arbitrum, avalanche, base, gnosis, mainnet, optimism, polygon, sonic } from 'viem/chains';
+import { arbitrum, base, citrea, mainnet } from 'viem/chains';
 import { ChainAddressMap } from './address.types';
 import { zeroAddress } from 'viem';
 
@@ -24,39 +24,19 @@ export const ADDRESS: ChainAddressMap = {
 		curveStableSwapNG_USDCUSDU: '0x6C5Ff8DCe52BE77b4eCE6B51996018f0C1713bA9',
 		curveStableSwapNG_USDCUSDU_gauge: '0xbB6eDb6E10fC89F1032F3c4DdB2e73d1BeDa423f',
 	},
-	[polygon.id]: {
-		// identifier
-		chainId: 137,
-		chainSelector: '4051577828743386545',
-	},
 	[arbitrum.id]: {
 		// identifier
 		chainId: 42161,
 		chainSelector: '4949039107694359620',
-	},
-	[optimism.id]: {
-		// identifier
-		chainId: 10,
-		chainSelector: '3734403246176062136',
 	},
 	[base.id]: {
 		// identifier
 		chainId: 8453,
 		chainSelector: '15971525489660198786',
 	},
-	[avalanche.id]: {
+	[citrea.id]: {
 		// identifier
-		chainId: 43114,
-		chainSelector: '6433500567565415381',
-	},
-	[gnosis.id]: {
-		// identifier
-		chainId: 100,
-		chainSelector: '465200170687744372',
-	},
-	[sonic.id]: {
-		// identifier
-		chainId: 146,
-		chainSelector: '1673871237479749969',
+		chainId: 4114,
+		chainSelector: '', // not yet listed in the Chainlink CCIP directory
 	},
 } as const;

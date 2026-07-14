@@ -62,22 +62,6 @@ const config: HardhatUserConfig = {
 			gasPrice: 'auto',
 			gasMultiplier: 2,
 		},
-		polygon: {
-			url: `https://polygon-mainnet.g.alchemy.com/v2/${alchemy}`,
-			chainId: 137,
-			gas: 'auto',
-			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
-			timeout: 50_000,
-		},
-		optimism: {
-			url: `https://opt-mainnet.g.alchemy.com/v2/${alchemy}`,
-			chainId: 10,
-			gas: 'auto',
-			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
-			timeout: 50_000,
-		},
 		arbitrum: {
 			url: `https://arb-mainnet.g.alchemy.com/v2/${alchemy}`,
 			chainId: 42161,
@@ -94,25 +78,9 @@ const config: HardhatUserConfig = {
 			accounts: [wallet.privateKey],
 			timeout: 50_000,
 		},
-		avalanche: {
-			url: `https://avax-mainnet.g.alchemy.com/v2/${alchemy}`,
-			chainId: 43114,
-			gas: 'auto',
-			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
-			timeout: 50_000,
-		},
-		gnosis: {
-			url: `https://gnosis-mainnet.g.alchemy.com/v2/${alchemy}`,
-			chainId: 100,
-			gas: 'auto',
-			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
-			timeout: 50_000,
-		},
 		citrea: {
-			url: `https://rpc.testnet.citrea.xyz`,
-			chainId: 5115,
+			url: `https://rpc.mainnet.citrea.xyz`,
+			chainId: 4114,
 			gas: 'auto',
 			gasPrice: 'auto',
 			accounts: [wallet.privateKey],
@@ -123,6 +91,10 @@ const config: HardhatUserConfig = {
 		apiKey: {
 			// @ts-ignore
 			mainnet: etherscan,
+			// @ts-ignore
+			arbitrum: etherscan,
+			// @ts-ignore
+			base: etherscan,
 			citrea: 'API key',
 		},
 		customChains: [
@@ -135,11 +107,27 @@ const config: HardhatUserConfig = {
 				},
 			},
 			{
-				network: 'citrea',
-				chainId: 5115,
+				network: 'arbitrum',
+				chainId: 42161,
 				urls: {
-					apiURL: 'https://explorer.testnet.citrea.xyz/api',
-					browserURL: 'https://explorer.testnet.citrea.xyz',
+					apiURL: 'https://api.etherscan.io/v2/api?chainid=42161',
+					browserURL: 'https://arbiscan.io',
+				},
+			},
+			{
+				network: 'base',
+				chainId: 8453,
+				urls: {
+					apiURL: 'https://api.etherscan.io/v2/api?chainid=8453',
+					browserURL: 'https://basescan.org',
+				},
+			},
+			{
+				network: 'citrea',
+				chainId: 4114,
+				urls: {
+					apiURL: 'https://explorer.mainnet.citrea.xyz/api',
+					browserURL: 'https://explorer.mainnet.citrea.xyz',
 				},
 			},
 		],
