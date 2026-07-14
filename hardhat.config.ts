@@ -12,9 +12,6 @@ import { getChildFromSeed } from './helper/wallet';
 import dotenv from 'dotenv';
 dotenv.config();
 
-import * as tdly from '@tenderly/hardhat-tenderly';
-import { tenderly } from 'hardhat';
-
 // ---------------------------------------------------------------------------------------
 
 const indexParsed = process.env.DEPLOYER_SEED_INDEX;
@@ -64,22 +61,6 @@ const config: HardhatUserConfig = {
 			gas: 'auto',
 			gasPrice: 'auto',
 			gasMultiplier: 2,
-		},
-		tenderly: {
-			url: process.env.TENDERLY_RPC_URL,
-			chainId: 42069,
-			gas: 'auto',
-			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
-			timeout: 50_000,
-		},
-		sepolia: {
-			url: `https://eth-sepolia.g.alchemy.com/v2/${alchemy}`,
-			chainId: 11155111,
-			gas: 'auto',
-			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
-			timeout: 50_000,
 		},
 		polygon: {
 			url: `https://polygon-mainnet.g.alchemy.com/v2/${alchemy}`,
@@ -142,8 +123,7 @@ const config: HardhatUserConfig = {
 		apiKey: {
 			// @ts-ignore
 			mainnet: etherscan,
-			tenderly: '',
-			citrea: 'your API key',
+			citrea: 'API key',
 		},
 		customChains: [
 			{
@@ -152,14 +132,6 @@ const config: HardhatUserConfig = {
 				urls: {
 					apiURL: 'https://api.etherscan.io/v2/api?chainid=1',
 					browserURL: 'https://etherscan.io',
-				},
-			},
-			{
-				network: 'tenderly',
-				chainId: 42069,
-				urls: {
-					apiURL: `${process.env.TENDERLY_RPC_URL ?? ''}/verify/etherscan`,
-					browserURL: process.env.TENDERLY_RPC_URL ?? '',
 				},
 			},
 			{
