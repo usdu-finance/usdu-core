@@ -52,13 +52,6 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	/// @dev Enforces a 50,000 block cooldown (~7 days) between reconcile operations to prevent profit manipulation
 	uint256 public latestReconcile = 0;
 
-	/// @notice Maximum allowed deviation between the pool's spot price and its EMA oracle price (1e18-scaled, e.g. 0.01 ether = 1%)
-	/// @dev Guards the internal debt-coverage swap in _removeLiquidity against sandwich manipulation
-	uint256 public constant MAX_PRICE_DEVIATION = 0.01 ether;
-
-	/// @notice Slippage buffer applied on top of the current spot quote for the internal debt-coverage swap (1e18-scaled)
-	uint256 public constant EXCHANGE_SLIPPAGE_BUFFER = 0.003 ether;
-
 	// ---------------------------------------------------------------------------------------
 	// EVENTS
 	// ---------------------------------------------------------------------------------------
@@ -108,11 +101,6 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 
 	/// @notice Thrown when attempting reconcile operation before the 50,000 block cooldown period expires
 	error ReconcileGuardError();
-
-	/// @notice Thrown when the pool's spot price has deviated too far from its EMA oracle price
-	/// @param spot Current spot price reported by the pool
-	/// @param ema Current EMA oracle price reported by the pool
-	error PoolPriceDeviation(uint256 spot, uint256 ema);
 
 	// ---------------------------------------------------------------------------------------
 
@@ -294,31 +282,6 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	}
 
 	// ---------------------------------------------------------------------------------------
-	// SWAP PROTECTION
-	// ---------------------------------------------------------------------------------------
-
-	/**
-	 * @notice Computes a manipulation-resistant minimum output for exchanging `dx` of `coin` into stablecoin
-	 * @param dx Amount of `coin` to be sold into the pool
-	 * @return minOut Minimum acceptable stablecoin output for the swap
-	 * @dev Reverts with PoolPriceDeviation if the pool's spot price has drifted too far from its EMA oracle -
-	 *      the signature of an in-flight sandwich rather than genuine trade-size price impact. Once confirmed
-	 *      undisturbed, sizes minOut off the current spot quote (which already reflects this trade's own price
-	 *      impact) minus a small execution buffer, so legitimate large withdrawals aren't blocked by their own size.
-	 *      Assumes a 2-coin pool, where index 0 is the sole spot/EMA oracle entry (price of coin[1] in coin[0] terms).
-	 */
-	function quoteExchangeMinOut(uint256 dx) public view returns (uint256 minOut) {
-		uint256 spot = pool.get_p(0);
-		uint256 ema = pool.price_oracle(0);
-
-		uint256 diff = spot > ema ? spot - ema : ema - spot;
-		if (diff * 1 ether > MAX_PRICE_DEVIATION * ema) revert PoolPriceDeviation(spot, ema);
-
-		uint256 expected = pool.get_dy(int128(uint128(idxC)), int128(uint128(idxS)), dx);
-		minOut = expected - (expected * EXCHANGE_SLIPPAGE_BUFFER) / 1 ether;
-	}
-
-	// ---------------------------------------------------------------------------------------
 	// LIQUIDITY REMOVAL
 	// ---------------------------------------------------------------------------------------
 
@@ -379,7 +342,7 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 			// This conversion helps maintain the pool's stablecoin-heavy state
 			uint256 exchangeDx = withdrawn[idxC] / 2;
 			coin.forceApprove(address(pool), exchangeDx);
-			pool.exchange(int128(uint128(idxC)), int128(uint128(idxS)), exchangeDx, quoteExchangeMinOut(exchangeDx));
+			pool.exchange(int128(uint128(idxC)), int128(uint128(idxS)), exchangeDx, 0);
 
 			// Verify pool remains stablecoin-heavy (favorable for withdrawal)
 			verifyImbalance(false);
