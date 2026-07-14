@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { ethers, network } from 'hardhat';
 import { CurveAdapterV1_2, ICurveStableSwapNG, IERC20, Stablecoin } from '../../typechain';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { evm_increaseTime } from '../helper';
+import { evm_increaseTime, evm_mine_blocks } from '../helper';
 import { parseEther, parseUnits, zeroAddress } from 'viem';
 import { ADDRESS } from '../../exports/address.config';
 import { mainnet } from 'viem/chains';
@@ -353,6 +353,9 @@ describe('CurveAdapterV1_2: Enhanced Integration Tests', function () {
 
 	describe('4. Profit Reconciliation', () => {
 		before(async () => {
+			// Section 2 already called reconcile() once; ReconcileGuard enforces a 50,000 block
+			// cooldown between calls, so advance past it before reconciling again here.
+			await evm_mine_blocks(50000);
 			await showAdapterState();
 		});
 
@@ -447,6 +450,11 @@ describe('CurveAdapterV1_2: Enhanced Integration Tests', function () {
 			if (currentDebt > 0) {
 				const reductionAmount = parseEther('500');
 
+				// reduceMint burns the adapter's entire stable balance, not just what's contributed here —
+				// account for any pre-existing dust so the expected reduction matches exactly.
+				const residualBefore = await stable.balanceOf(adapter);
+				const expectedReduction = residualBefore + reductionAmount;
+
 				// Mint tokens to user for debt reduction
 				await stable.connect(module).mintModule(user.address, reductionAmount);
 				await stable.connect(user).approve(adapter, reductionAmount);
@@ -461,8 +469,8 @@ describe('CurveAdapterV1_2: Enhanced Integration Tests', function () {
 				const reduced = currentDebt - currentDebtAfter;
 
 				// Verify debt was reduced
-				expect(reduced).to.equal(reductionAmount);
-				expect(await adapter.totalMinted()).to.equal(currentDebt - reductionAmount);
+				expect(reduced).to.equal(expectedReduction);
+				expect(await adapter.totalMinted()).to.equal(currentDebt - expectedReduction);
 
 				// Verify excess was distributed
 				expect(await stable.balanceOf(rec0)).to.be.gte(rec0BalBefore);
