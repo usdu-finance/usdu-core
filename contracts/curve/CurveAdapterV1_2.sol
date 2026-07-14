@@ -52,10 +52,6 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	/// @dev Enforces a 50,000 block cooldown (~7 days) between reconcile operations to prevent profit manipulation
 	uint256 public latestReconcile = 0;
 
-	/// @notice Maximum allowed imbalance deviation (e.g., 0.2 ether = 20%)
-	/// @dev When pool imbalance is below this threshold, adapter operations are blocked to allow free market
-	uint256 public maxImbalanceThreshold = 0.2 ether;
-
 	// ---------------------------------------------------------------------------------------
 	// EVENTS
 	// ---------------------------------------------------------------------------------------
@@ -82,11 +78,6 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	/// @param totalMinted Total minted after revenue reconciliation
 	event Revenue(uint256 amount, uint256 totalRevenue, uint256 totalMinted);
 
-	/// @notice Emitted when the maximum imbalance threshold is updated
-	/// @param previousThreshold The previous threshold value
-	/// @param newThreshold The new threshold value
-	event ImbalanceThresholdUpdated(uint256 previousThreshold, uint256 newThreshold);
-
 	// ---------------------------------------------------------------------------------------
 	// CUSTOM ERRORS
 	// ---------------------------------------------------------------------------------------
@@ -110,11 +101,6 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 
 	/// @notice Thrown when attempting reconcile operation before the 50,000 block cooldown period expires
 	error ReconcileGuardError();
-
-	/// @notice Thrown when pool imbalance is within threshold and adapter operations are blocked
-	/// @param currentDeviation Current pool imbalance deviation
-	/// @param maxAllowed Maximum allowed deviation threshold
-	error ImbalanceWithinThreshold(uint256 currentDeviation, uint256 maxAllowed);
 
 	// ---------------------------------------------------------------------------------------
 
@@ -159,24 +145,6 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 		idxC = _idxC;
 
 		coin = IERC20Metadata(_pool.coins(_idxC));
-
-		// Emit event for initial threshold value
-		emit ImbalanceThresholdUpdated(0, maxImbalanceThreshold);
-	}
-
-	// ---------------------------------------------------------------------------------------
-	// CONFIGURATION
-	// ---------------------------------------------------------------------------------------
-
-	/**
-	 * @notice Updates the maximum imbalance threshold for adapter operations
-	 * @param threshold New threshold value (e.g., 0.2 ether = 20%)
-	 * @dev Only curator can adjust this parameter to control when adapter intervenes in market
-	 */
-	function setMaxImbalanceThreshold(uint256 threshold) external onlyCurator {
-		uint256 previousThreshold = maxImbalanceThreshold;
-		maxImbalanceThreshold = threshold;
-		emit ImbalanceThresholdUpdated(previousThreshold, threshold);
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -223,64 +191,18 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 	}
 
 	/**
-	 * @notice Verifies that the pool imbalance state matches the expected condition and exceeds threshold
+	 * @notice Verifies that the pool imbalance state matches the expected condition
 	 * @param state Expected imbalance state (true = coin-heavy, false = stablecoin-heavy)
-	 * @dev Reverts if state doesn't match or if imbalance is below threshold (allowing free market)
+	 * @dev Reverts if the actual imbalance state doesn't match
 	 */
 	function verifyImbalance(bool state) public view {
-		(uint256 deficientIndex, , uint256 deviation) = checkImbalance();
-
-		// Check if deviation is below threshold - if so, block adapter operations
-		if (deviation < maxImbalanceThreshold) {
-			revert ImbalanceWithinThreshold(deviation, maxImbalanceThreshold);
-		}
+		(uint256 deficientIndex, , ) = checkImbalance();
 
 		// Verify the expected imbalance state matches actual state
 		bool actualState = (deficientIndex == idxS); // true if stablecoin is deficient (coin-heavy)
 		if (actualState != state) {
 			revert ImbalancedVariant(pool.get_balances());
 		}
-	}
-
-	/**
-	 * @notice Calculates the minimum amount needed to activate adapter operations
-	 * @return tokenIndex Index of the token that needs to be added (idxS or idxC)
-	 * @return amount Minimum amount to add in the token's native decimals
-	 * @dev Returns (0, 0) if adapter is already active. Amount is properly scaled:
-	 *      - For stablecoin (idxS): returned in 18 decimals
-	 *      - For coin (idxC): returned in coin's native decimals
-	 */
-	function getAmountToActivateAdapter() external view returns (uint256 tokenIndex, uint256 amount) {
-		(uint256 deficientIndex, , uint256 deviation) = checkImbalance();
-
-		// If adapter is already active, no additional amount needed
-		if (deviation >= maxImbalanceThreshold) {
-			return (0, 0);
-		}
-
-		// Get current balances in 18 decimals for calculation
-		uint256 coinAmount = (pool.balances(idxC) * 1 ether) / 10 ** coin.decimals();
-		uint256 stableAmount = pool.balances(idxS);
-		uint256 totalAmount = coinAmount + stableAmount;
-
-		// Determine which token is deficient
-		uint256 deficientAmount = (deficientIndex == idxS) ? stableAmount : coinAmount;
-
-		// Calculate required amount using formula: x = (2 * deficient - total * (1 - threshold)) / (1 + threshold)
-		uint256 numerator = (2 * deficientAmount) - ((totalAmount * (1 ether - maxImbalanceThreshold)) / 1 ether);
-		uint256 denominator = 1 ether + maxImbalanceThreshold;
-		uint256 requiredAmount = (numerator * 1 ether) / denominator;
-
-		// Adjust for token decimals
-		if (deficientIndex == idxC) {
-			// Convert from 18 decimals to coin decimals
-			amount = (requiredAmount * 10 ** coin.decimals()) / 1 ether;
-		} else {
-			// Keep in 18 decimals for stablecoin
-			amount = requiredAmount;
-		}
-
-		return (deficientIndex, amount);
 	}
 
 	// ---------------------------------------------------------------------------------------
