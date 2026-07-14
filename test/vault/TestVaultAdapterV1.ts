@@ -1,12 +1,12 @@
 import { expect } from 'chai';
 import { ethers, network } from 'hardhat';
-import { Stablecoin, VaultAdapterRecoverV1 } from '../typechain';
+import { Stablecoin, VaultAdapterRecoverV1 } from '../../typechain';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { ADDRESS } from '../exports/address.config';
+import { ADDRESS } from '../../exports/address.config';
 import { mainnet } from 'viem/chains';
 import { parseEther, zeroAddress } from 'viem';
-import { evm_increaseTime } from './helper';
-import { IERC4626 } from '../typechain/@openzeppelin/contracts/interfaces';
+import { evm_increaseTime } from '../helper';
+import { IERC4626 } from '../../typechain/@openzeppelin/contracts/interfaces';
 
 describe('Deploy Stablecoin', function () {
 	const addr = ADDRESS[mainnet.id];
@@ -21,6 +21,7 @@ describe('Deploy Stablecoin', function () {
 	let module: SignerWithAddress;
 
 	const EXPIRED_AT = 999999999999n;
+	const USDU_CORE_VAULT = '0xce22b5fb17ccbc0c5d87dc2e0df47dd71e3adc0a';
 
 	before(async function () {
 		[user, module] = await ethers.getSigners();
@@ -32,12 +33,12 @@ describe('Deploy Stablecoin', function () {
 		stable = await ethers.getContractAt('Stablecoin', addr.usduStable);
 
 		// @ts-ignore
-		core = await ethers.getContractAt('@openzeppelin/contracts/interfaces/IERC4626.sol:IERC4626', addr.usduCoreVault);
+		core = await ethers.getContractAt('@openzeppelin/contracts/interfaces/IERC4626.sol:IERC4626', USDU_CORE_VAULT);
 
 		const Adapter = await ethers.getContractFactory('VaultAdapterRecoverV1');
 		adapter = await Adapter.deploy(
 			addr.usduStable,
-			addr.usduCoreVault,
+			USDU_CORE_VAULT,
 			[addr.curator, zeroAddress, zeroAddress, zeroAddress, zeroAddress],
 			[1000n, 0, 0, 0, 0]
 		);

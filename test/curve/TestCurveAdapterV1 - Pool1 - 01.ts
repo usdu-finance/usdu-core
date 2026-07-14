@@ -21,6 +21,7 @@ describe('Deploy Stablecoin', function () {
 
 	const USDC_TOKEN = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 	const USDC_HOLDER = '0x55fe002aeff02f77364de339a1292923a15844b8'; // Circle Reserve Wallet (or any whale)
+	const CURVE_POOL_USDUUSDC = '0x771c91e699B4B23420de3F81dE2aA38C4041632b'; // factory-stable-ng-506, deprecated pool
 	const expiredAt = 999999999999;
 	const amount = '10000';
 
@@ -44,11 +45,11 @@ describe('Deploy Stablecoin', function () {
 		// parse contracts
 		stable = await ethers.getContractAt('Stablecoin', addr.usduStable);
 		usdc = await ethers.getContractAt('IERC20', USDC_TOKEN);
-		pool = await ethers.getContractAt('ICurveStableSwapNG', addr.curveStableSwapNG_USDUUSDC);
+		pool = await ethers.getContractAt('ICurveStableSwapNG', CURVE_POOL_USDUUSDC);
 
 		// deploy adapter
 		const CurveAdapter = await ethers.getContractFactory('CurveAdapterV1');
-		adapter = await CurveAdapter.deploy(addr.curveStableSwapNG_USDUUSDC, 0, 1);
+		adapter = await CurveAdapter.deploy(CURVE_POOL_USDUUSDC, 0, 1);
 
 		// fund curator with eth
 		await module.sendTransaction({

@@ -4,20 +4,21 @@ import {
 	ERC20,
 	IMetaMorphoV1_1,
 	IMetaMorphoV1_1Factory,
-	IMorpho,
 	TestToken,
 	MorphoAdapterV1,
 	RewardRouterV0,
 	Stablecoin,
 	VaultDeployer,
-} from '../typechain';
+} from '../../typechain';
+import { IMorpho } from '../../typechain/contracts/morpho/helpers/IMorpho.sol/IMorpho';
+import { IMorpho__factory } from '../../typechain/factories/contracts/morpho/helpers/IMorpho.sol/IMorpho__factory';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { ADDRESS } from '../exports/address.config';
+import { ADDRESS } from '../../exports/address.config';
 import { mainnet } from 'viem/chains';
 import { Address, parseEther, parseUnits, zeroAddress } from 'viem';
-import { MarketParamsStruct } from '../typechain/contracts/deploy/VaultDeployer';
+import { MarketParamsStruct } from '../../typechain/contracts/deploy/VaultDeployer';
 import { BytesLike } from 'ethers';
-import { evm_increaseTime } from './helper';
+import { evm_increaseTime } from '../helper';
 
 describe('Deploy Stablecoin', function () {
 	const addr = ADDRESS[mainnet.id];
@@ -41,17 +42,23 @@ describe('Deploy Stablecoin', function () {
 	let user: SignerWithAddress;
 	let module: SignerWithAddress;
 
+	const MORPHO_BLUE = '0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb';
+	const MORPHO_IRM = '0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC';
+	const MORPHO_META_MORPHO_FACTORY_1_1 = '0x1897A8997241C1cD4bD0698647e4EB7213535c24';
+	const MORPHO_PUBLIC_ALLOCATOR = '0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D';
+	const MORPHO_URD = '0x330eefa8a787552DC5cAd3C3cA644844B1E61Ddb';
+
 	before(async function () {
 		[curator, user, module] = await ethers.getSigners();
 
-		morpho = await ethers.getContractAt('IMorpho', addr.morphoBlue);
+		morpho = IMorpho__factory.connect(MORPHO_BLUE, curator);
 
 		const VaultDeployer = await ethers.getContractFactory('VaultDeployer');
 		vaultDeployer = await VaultDeployer.deploy(
-			addr.morphoBlue,
-			addr.morphoMetaMorphoFactory1_1,
-			addr.morphoPublicAllocator,
-			addr.morphoURD,
+			MORPHO_BLUE,
+			MORPHO_META_MORPHO_FACTORY_1_1,
+			MORPHO_PUBLIC_ALLOCATOR,
+			MORPHO_URD,
 			curator.address
 		);
 
@@ -64,7 +71,7 @@ describe('Deploy Stablecoin', function () {
 			loanToken: await stable.getAddress(),
 			collateralToken: await testToken.getAddress(),
 			oracle: '0xA6D6950c9F177F1De7f7757FB33539e3Ec60182a',
-			irm: addr.morphoIrm,
+			irm: MORPHO_IRM,
 			lltv: parseUnits('86', 16),
 		};
 

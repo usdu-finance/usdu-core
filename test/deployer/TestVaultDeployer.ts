@@ -27,16 +27,21 @@ describe('Deploy VaultDeployer', function () {
 	let guardian: SignerWithAddress;
 	let module: SignerWithAddress;
 
+	const MORPHO_BLUE = '0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb';
+	const MORPHO_META_MORPHO_FACTORY_1_1 = '0x1897A8997241C1cD4bD0698647e4EB7213535c24';
+	const MORPHO_PUBLIC_ALLOCATOR = '0xfd32fA2ca22c76dD6E550706Ad913FC6CE91c75D';
+	const MORPHO_URD = '0x330eefa8a787552DC5cAd3C3cA644844B1E61Ddb';
+
 	before(async function () {
 		[curator, guardian, module] = await ethers.getSigners();
 		const addr = ADDRESS[mainnet.id];
 
 		const VaultDeployer = await ethers.getContractFactory('VaultDeployer');
 		vaultDeployer = await VaultDeployer.deploy(
-			addr.morphoBlue,
-			addr.morphoMetaMorphoFactory1_1,
-			addr.morphoPublicAllocator,
-			addr.morphoURD,
+			MORPHO_BLUE,
+			MORPHO_META_MORPHO_FACTORY_1_1,
+			MORPHO_PUBLIC_ALLOCATOR,
+			MORPHO_URD,
 			curator.address
 		);
 

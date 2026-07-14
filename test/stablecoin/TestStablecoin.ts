@@ -1,8 +1,8 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
-import { Stablecoin } from '../typechain';
+import { Stablecoin } from '../../typechain';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { evm_increaseTime, getTimeStamp } from './helper';
+import { evm_increaseTime, getTimeStamp } from '../helper';
 import { parseEther } from 'viem';
 
 describe('Deploy Stablecoin', function () {

@@ -9,14 +9,14 @@ import {
 	MorphoAdapterV1_2,
 	Stablecoin,
 	VaultDeployer,
-} from '../typechain';
+} from '../../typechain';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { ADDRESS } from '../exports/address.config';
+import { ADDRESS } from '../../exports/address.config';
 import { mainnet } from 'viem/chains';
 import { Address, parseEther, parseUnits, zeroAddress } from 'viem';
-import { MarketParamsStruct } from '../typechain/contracts/deploy/VaultDeployer';
+import { MarketParamsStruct } from '../../typechain/contracts/deploy/VaultDeployer';
 import { BytesLike } from 'ethers';
-import { evm_increaseTime } from './helper';
+import { evm_increaseTime } from '../helper';
 
 describe('Deploy Stablecoin', function () {
 	const addr = ADDRESS[mainnet.id];
@@ -38,6 +38,8 @@ describe('Deploy Stablecoin', function () {
 	let module: SignerWithAddress;
 
 	const EXPIRED_AT = 999999999999n;
+	const MORPHO_BLUE = '0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb';
+	const USDU_CORE_VAULT = '0xce22b5fb17ccbc0c5d87dc2e0df47dd71e3adc0a';
 
 	before(async function () {
 		[user, module] = await ethers.getSigners();
@@ -46,14 +48,14 @@ describe('Deploy Stablecoin', function () {
 		await network.provider.request({ method: 'hardhat_impersonateAccount', params: [addr.curator] });
 		curator = await ethers.getSigner(addr.curator);
 
-		morpho = await ethers.getContractAt('IMorpho', addr.morphoBlue);
+		morpho = await ethers.getContractAt('IMorpho', MORPHO_BLUE);
 		stable = await ethers.getContractAt('Stablecoin', addr.usduStable);
-		core = await ethers.getContractAt('IMetaMorphoV1_1', addr.usduCoreVault);
+		core = await ethers.getContractAt('IMetaMorphoV1_1', USDU_CORE_VAULT);
 
 		const Adapter = await ethers.getContractFactory('MorphoAdapterV1_2');
 		adapter = await Adapter.deploy(
 			addr.usduStable,
-			addr.usduCoreVault,
+			USDU_CORE_VAULT,
 			[addr.curator, zeroAddress, zeroAddress, zeroAddress, zeroAddress],
 			[1000n, 0, 0, 0, 0]
 		);

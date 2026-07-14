@@ -1,12 +1,12 @@
 import { expect } from 'chai';
 import { ethers, network } from 'hardhat';
-import { Stablecoin, VaultAdapterRecoverV1 } from '../typechain';
+import { Stablecoin, VaultAdapterRecoverV1 } from '../../typechain';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import { ADDRESS } from '../exports/address.config';
+import { ADDRESS } from '../../exports/address.config';
 import { mainnet } from 'viem/chains';
 import { parseEther, zeroAddress } from 'viem';
-import { evm_increaseTime } from './helper';
-import { IERC4626 } from '../typechain/@openzeppelin/contracts/interfaces';
+import { evm_increaseTime } from '../helper';
+import { IERC4626 } from '../../typechain/@openzeppelin/contracts/interfaces';
 
 describe('Deploy Stablecoin', function () {
 	const addr = ADDRESS[mainnet.id];
