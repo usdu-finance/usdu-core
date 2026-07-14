@@ -11,7 +11,7 @@ import {RewardDistributionV1, Stablecoin} from '../reward/RewardDistributionV1.s
 
 /**
  * @title VaultAdapterV1
- * @author @samclassix <samclassix@proton.me>, @wrytlabs <wrytlabs@proton.me>
+ * @author @samclassix <samclassix@proton.me>
  * @notice This contract serves as an adapter for interacting with vaults, facilitating the direct minting of liquidity into them.
  */
 contract VaultAdapterV1 is RewardDistributionV1 {
