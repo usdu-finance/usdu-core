@@ -30,6 +30,10 @@ contracts/
 
 > See `exports/address.types.ts` for complete chain configurations and `exports/address.config.ts` for deployed addresses.
 
+## Design Notes
+
+-   **No permanent modules**: every module set via `Stablecoin.setModule` / `setModulePublic` carries an `expiredAt` timestamp. There is no "forever" sentinel (e.g. `type(uint256).max`) — future deployments should bound `expiredAt` to a `maxLifespan` (e.g. 100yrs), which is effectively permanent in practice but keeps modules re-affirmable.
+
 ## Quick Start
 
 ```bash

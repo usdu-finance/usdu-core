@@ -301,6 +301,13 @@ contract Stablecoin is IStablecoin, ERC20, ERC20Permit, ERC1363 {
 
 	/// @inheritdoc IStablecoin
 	function setModule(address module, uint256 expiredAt, string calldata message) external onlyCurator {
+		// @dev: for future deployments, might enforce "expiredAt" to still be valid once the timelock elapses
+		// if (block.timestamp + timelock > expiredAt) revert ErrorsLib.???();
+
+		// @dev: for future deployments, might enforce "expiredAt" to be within "maxLifespan" e.g. 100yrs
+		// (there is no "permanent" module, only one valid for up to maxLifespan)
+		// if (block.timestamp + maxLifespan < expiredAt) revert ErrorsLib.???();
+
 		if (modules[module] == expiredAt) revert ErrorsLib.AlreadySet();
 		if (pendingModules[module].validAt != 0) revert ErrorsLib.AlreadyPending();
 
@@ -313,7 +320,12 @@ contract Stablecoin is IStablecoin, ERC20, ERC20Permit, ERC1363 {
 	}
 
 	/// @inheritdoc IStablecoin
-	function setModulePublic(address module, uint256 expiredAt, string calldata message, uint256 fee) external claimPublicFee(fee, ConstantsLib.PUBLIC_FEE) {
+	function setModulePublic(
+		address module,
+		uint256 expiredAt,
+		string calldata message,
+		uint256 fee
+	) external claimPublicFee(fee, ConstantsLib.PUBLIC_FEE) {
 		if (modules[module] == expiredAt) revert ErrorsLib.AlreadySet();
 		if (pendingModules[module].validAt != 0) revert ErrorsLib.AlreadyPending();
 
