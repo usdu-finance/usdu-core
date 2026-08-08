@@ -10,4 +10,7 @@ interface IModuleExpense {
 
 	/// @notice The module's lifetime expenses/payments (e.g. paid interest/coupons), denominated in stablecoin units.
 	function totalExpense() external view returns (uint256);
+
+	/// @notice The maximum totalFunds this module may hold, denominated in stablecoin units.
+	function fundsCap() external view returns (uint256);
 }

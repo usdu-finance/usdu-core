@@ -13,4 +13,7 @@ interface IModuleRevenue {
 
 	/// @notice The module's lifetime revenue/profit, denominated in stablecoin units.
 	function totalRevenue() external view returns (uint256);
+
+	/// @notice The maximum amount this module may mint, denominated in stablecoin units.
+	function mintCap() external view returns (uint256);
 }
