@@ -6,25 +6,37 @@
 - `contracts/swap/SwapBridgeMorpho.sol`
 - `contracts/module/IModuleRevenue.sol`
 
-**Commit:** 6928438
+**Commit:** 6928438 (original audit) — re-verified against current branch tip (post `fe6da31`)
+
+---
+
+## Update — 2026-08-09 (v2, supersedes the earlier update note)
+
+Since the original audit, both files were renamed (`SwapBridgeMorpho.sol` → `contracts/swap/SwapBridgeMorphoV1.sol`, `IModuleRevenue.sol` → `contracts/module/IModuleRevenueV1.sol`); findings below still refer to the original paths/line numbers as they stood at commit 6928438. The architecture changed substantially after the first update to this report (which described a now-superseded `repay()`/`redeem()`-based mitigation for H-01 — those functions have since been removed entirely in favor of the design described below).
+
+- **H-02 is RESOLVED.** `ModuleRevenueV1` now inherits OpenZeppelin's `ReentrancyGuard`; `swapIn`, `swapInTo`, `swapOut`, `swapOutTo`, `reconcile()`, and `reconcile(bool)` are all `nonReentrant` and share the same guard by inheritance, so reentering any one of them while another is mid-execution reverts — closing the exploit path this finding described.
+- **H-01 is now fully RESOLVED**, not just mitigated. `_swapOut`'s fee is no longer minted at all — it's taken directly out of the withdrawn `coin` (two `vault.withdraw` calls: one to the swapper, one to the curator for the fee), so `swapOut`/`swapOutTo` never call `mintModule` and are now completely independent of `validModule`. Verified directly: a new `post-expiry wind-down` test suite deploys a module, lets it expire, and confirms `swapIn` still correctly reverts while `swapOut` still succeeds, taking its fee in coin. The earlier `repay()`/`redeem()` curator-unwind functions this update previously described are no longer needed for this and have been removed — `reconcile()` (permissionless) now auto-falls-back to redeeming its surplus as coin instead of minting whenever the module is no longer a valid minter (`_reconcile` checks `stable.checkValidModule(address(this))` and silently downgrades `allowMinting` rather than reverting), so revenue recognition also stays available indefinitely post-expiry without needing curator intervention. A separate curator-gated `reconcile(bool allowMinting)` overload allows explicitly forcing either path regardless of validity.
+- **`_reconcile`'s mint path is now also uncapped** (via the plain `_mint`, not `_mintWithCap`): it only ever mints against a deficit that's already fully backed by real `totalAssets()`, so it can't create unbacked stablecoin regardless of `mintCap` — and leaving it capped would reintroduce a variant of the same "stuck reconciliation" risk this report's Notes previously flagged. `mintCap` now exclusively bounds `swapIn`'s principal-backed issuance. See **[L-02]** below for the resulting documentation-drift finding this introduces.
+- **L-01 is unchanged** — not addressed.
+- **The "Silent revenue plateau at mintCap" Notes item is obsolete** — reconciliation is no longer capped at all, so there's no plateau to detect.
 
 ---
 
 ## Summary
 
-| Severity | Count |
-|----------|-------|
-| Critical | 0 |
-| High     | 2 |
-| Medium   | 0 |
-| Low      | 2 |
-| Info     | 1 |
+| Severity | Count | Status |
+|----------|-------|--------|
+| Critical | 0 | — |
+| High     | 2 | resolved |
+| Medium   | 0 | — |
+| Low      | 2 | 1 open (L-01), 1 fixed (L-02) |
+| Info     | 0 | — |
 
 ---
 
 ## Findings
 
-### [H-01] swapOut becomes permanently unusable once the module expires, defeating wind-down
+### [H-01] swapOut becomes permanently unusable once the module expires, defeating wind-down — RESOLVED
 **Location:** `contracts/swap/SwapBridgeMorpho.sol:117-130` (`_swapOut`), `contracts/module/ModuleRevenueV1.sol:38-44` (`_mint`)
 
 **Description:**
@@ -42,7 +54,7 @@ This directly conflicts with the module-expiry design documented in `docs/deprec
 
 ---
 
-### [H-02] No reentrancy guard; deposit-before-mint ordering in swapIn can be exploited by a reentrant reconcile()
+### [H-02] No reentrancy guard; deposit-before-mint ordering in swapIn can be exploited by a reentrant reconcile() — RESOLVED
 **Location:** `contracts/swap/SwapBridgeMorpho.sol:86-102` (`_swapIn`), `contracts/module/ModuleRevenueV1.sol:76-88` (`_reconcile`), `contracts/module/ModuleRevenueV1.sol:51-53` (`reconcile`, fully permissionless)
 
 **Description:**
@@ -90,9 +102,19 @@ Neither `ModuleRevenueV1` nor `SwapBridgeMorpho` has any `nonReentrant` guard, u
 
 ---
 
+### [L-02] `mintCap`'s docstring no longer describes actual behavior — FIXED
+**Location:** `contracts/module/IModuleRevenueV1.sol` (`mintCap()`), `contracts/module/ModuleRevenueV1.sol` (`_reconcile`)
+
+**Description:** `IModuleRevenueV1.mintCap()` is documented as "The maximum amount this module may mint" — but as of the reconcile redesign, that's only true for principal-backed issuance through `_mintWithCap` (used by `swapIn`). `_reconcile`'s revenue mint uses the uncapped `_mint`, deliberately, since it only ever mints against a deficit already fully backed by `totalAssets()` — so `totalMinted` can now legitimately exceed `mintCap` once enough interest/revenue has been reconciled over time.
+
+**Impact:** Purely a documentation/interface-clarity issue, not a fund-safety one — the module stays fully backed regardless. But an integrator or risk dashboard reading `mintCap()` at face value (e.g. computing "headroom" as `mintCap - totalMinted`) would get a nonsensical or negative result once this happens, without any indication that's expected.
+
+**Recommendation:** Update `mintCap()`'s NatSpec (in `IModuleRevenueV1`) to clarify it bounds new principal-backed issuance specifically, not `totalMinted` as a whole — e.g. "The maximum amount this module may mint against new deposits; totalMinted can exceed this once revenue reconciliation mints against already-backed surplus."
+
+---
+
 ## Notes
 
-- **Silent revenue plateau at `mintCap`.** `_reconcile()`'s clamp-to-headroom behavior (`contracts/module/ModuleRevenueV1.sol:76-88`) is a deliberate and correct fix versus the earlier revert-on-overflow version, but it means that once `totalMinted` reaches `mintCap`, further accrued interest is silently never recognized (`mintable == 0` → no-op, no event). Consider emitting an event (or at least distinguishing this no-op path) so off-chain monitoring/curator tooling can detect "this module has saturated its cap" without having to independently compare `totalAssets()` against `mintCap`.
 - **Vault illiquidity can revert `swapOut`.** Morpho Vault V2's documented "in-kind redemption" mechanics and non-conventional `maxWithdraw() == 0` behavior mean `vault.withdraw(...)` in `_swapOut` isn't guaranteed to be instantly liquid. Not a security defect (a revert here is atomic and leaves no inconsistent state), but worth surfacing to integrators/frontends as an expected failure mode distinct from a "bad input" revert.
 - **Residual ERC20 allowance to the vault.** `coin.forceApprove(address(vault), amount)` in `_swapIn` sets (not increments) the allowance each call, so there's no unbounded-approval growth, but if a given `vault.deposit` call doesn't consume the full approved amount, the leftover allowance persists until the next `swapIn` overwrites it. Low risk since `vault` is an immutable, curator-chosen address, not attacker-controlled — noted for completeness rather than as a finding.
 - **Rounding direction is consistently safe.** Both `totalAssets()` and the swap-out coin conversion floor their division results, which is the conservative direction (never over-reports assets, never overpays a redeemer). No change needed.
