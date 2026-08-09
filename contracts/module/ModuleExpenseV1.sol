@@ -3,16 +3,16 @@ pragma solidity ^0.8.20;
 
 import {IStablecoinModifier, Stablecoin} from '../stablecoin/IStablecoinModifier.sol';
 
-import {IModuleExpense} from './IModuleExpense.sol';
+import {IModuleExpenseV1} from './IModuleExpenseV1.sol';
 
 // TODO: verify code and evtl bug fixes
 
 /// @title ModuleExpenseV1
 /// @author @samclassix <samclassix@proton.me>
-/// @notice Abstract module implementing the expense bookkeeping side of IModuleExpense. Tracks totalExpense
+/// @notice Abstract module implementing the expense bookkeeping side of IModuleExpenseV1. Tracks totalExpense
 ///         and offers a fundsCap guard; totalFunds is left to the concrete module, since only it knows how
 ///         its own held/deployed funds are valued.
-abstract contract ModuleExpenseV1 is IStablecoinModifier, IModuleExpense {
+abstract contract ModuleExpenseV1 is IStablecoinModifier, IModuleExpenseV1 {
 	/// @notice Thrown when funding would push totalFunds above fundsCap.
 	error FundsCapExceeded(uint256 requested, uint256 cap);
 

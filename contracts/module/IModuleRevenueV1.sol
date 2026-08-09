@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.20;
 
-/// @title IModuleRevenue
+/// @title IModuleRevenueV1
 /// @notice Common accounting surface for stablecoin modules, exposing assets, liabilities and revenue in
 ///         stablecoin units so callers (e.g. a registry, dashboard, or keeper) can read and reconcile any
 ///         module polymorphically.
-interface IModuleRevenue {
+interface IModuleRevenueV1 {
 	/// @notice The module's assets, denominated in stablecoin units.
 	function totalAssets() external view returns (uint256);
 

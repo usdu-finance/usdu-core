@@ -3,14 +3,14 @@ pragma solidity ^0.8.20;
 
 import {IStablecoinModifier, Stablecoin} from '../stablecoin/IStablecoinModifier.sol';
 
-import {IModuleRevenue} from './IModuleRevenue.sol';
+import {IModuleRevenueV1} from './IModuleRevenueV1.sol';
 
 /// @title ModuleRevenueV1
 /// @author @samclassix <samclassix@proton.me>
-/// @notice Abstract module implementing the minting/accounting bookkeeping side of IModuleRevenue. Tracks
+/// @notice Abstract module implementing the minting/accounting bookkeeping side of IModuleRevenueV1. Tracks
 ///         totalMinted and totalRevenue against an immutable mintCap set at construction. totalAssets is
 ///         left to the concrete module, since only it knows how its own position is valued.
-abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenue {
+abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenueV1 {
 	/// @notice Thrown when a mint would push totalMinted above mintCap.
 	error MintCapExceeded(uint256 requested, uint256 cap);
 

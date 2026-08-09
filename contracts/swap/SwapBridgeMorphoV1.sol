@@ -10,14 +10,14 @@ import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ModuleRevenueV1, Stablecoin} from '../module/ModuleRevenueV1.sol';
 
 /**
- * @title SwapBridgeMorpho
+ * @title SwapBridgeMorphoV1
  * @author @samclassix <samclassix@proton.me>
  * @notice A stablecoin bridge for a trusted source coin (e.g. USDC): swapping in mints stablecoin 1:1 minus a
  *         fee and puts the coin to work in an ERC4626 vault (e.g. a Morpho Vault V2); swapping out redeems the
  *         position and burns the stablecoin, again minus a fee. Accrued vault interest is periodically
  *         recognized as revenue via reconcile(), minted straight to the curator.
  */
-contract SwapBridgeMorpho is ModuleRevenueV1 {
+contract SwapBridgeMorphoV1 is ModuleRevenueV1 {
 	using Math for uint256;
 	using SafeERC20 for IERC20Metadata;
 
