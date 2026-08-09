@@ -10,8 +10,10 @@ import {IModuleRevenueV1} from './IModuleRevenueV1.sol';
 /// @title ModuleRevenueV1
 /// @author @samclassix <samclassix@proton.me>
 /// @notice Abstract module implementing the minting/accounting bookkeeping side of IModuleRevenueV1. Tracks
-///         totalMinted and totalRevenue against an immutable mintCap set at construction. totalAssets is
-///         left to the concrete module, since only it knows how its own position is valued.
+///         totalMinted and totalRevenue, with new principal-backed issuance (via _mintWithCap) bounded by an
+///         immutable mintCap set at construction — totalMinted itself can still exceed mintCap once revenue
+///         reconciliation mints against already-backed surplus, which is never capped. totalAssets is left to
+///         the concrete module, since only it knows how its own position is valued.
 /// @dev Inherits ReentrancyGuard so reconcile() and any concrete module's own state-mutating entrypoints
 ///      (e.g. swapIn/swapOut) share a single nonReentrant guard across the whole contract.
 abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenueV1, ReentrancyGuard {
@@ -39,9 +41,12 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenueV1, Reen
 
 	// ---------------------------------------------------------------------------------------
 
-	/// @dev Mints `amount` stablecoin to `to` unconditionally, without checking mintCap. Only safe where the
-	///      caller already guarantees `amount` cannot push totalMinted above mintCap (e.g. a net-decreasing
-	///      mint, or an amount already clamped to remaining headroom) — use _mintWithCap otherwise.
+	/// @dev Mints `amount` stablecoin to `to` unconditionally, without checking mintCap. Only safe where
+	///      `amount` represents revenue rather than new principal-backed exposure — e.g. _reconcile's surplus
+	///      mint (already fully backed by real totalAssets) or a swap fee split off principal that was already
+	///      checked via _mintWithCap — since capping these too would be redundant at best, and at worst could
+	///      block reconciliation or swaps over accrued interest alone. Use _mintWithCap for anything that isn't
+	///      already backed or already checked.
 	function _mint(address to, uint256 amount) internal {
 		totalMinted += amount;
 		stable.mintModule(to, amount);
@@ -65,15 +70,6 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenueV1, Reen
 		_reconcileWithGuard(true, false);
 	}
 
-	/// @notice Recognizes accrued totalAssets growth as revenue, explicitly choosing whether to mint it
-	///         (`allowMinting`) or redeem it out of the backing position instead (e.g. a vault position),
-	///         without minting. Curator-gated: unlike the auto-selected fallback in reconcile(), deliberately
-	///         forcing the redeem path pulls capital out of the backing position, and a permissionless caller
-	///         could time that adversarially.
-	function reconcile(bool allowMinting) external onlyCurator nonReentrant {
-		_reconcileWithGuard(allowMinting, false);
-	}
-
 	/// @dev Runs _reconcile() if at least stable.timelock() has elapsed since the last successful call. When
 	///      `allowPassing` is true, an elapsed-guard failure is silently skipped instead of reverting, letting a
 	///      caller reconcile opportunistically without risking its own transaction.
@@ -87,6 +83,18 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenueV1, Reen
 		_reconcile(allowMinting);
 	}
 
+	// ---------------------------------------------------------------------------------------
+
+	/// @notice Recognizes accrued totalAssets growth as revenue, explicitly choosing whether to mint it
+	///         (`allowMinting`) or redeem it out of the backing position instead (e.g. a vault position),
+	///         without minting. Curator-gated: unlike the auto-selected fallback in reconcile(), deliberately
+	///         forcing the redeem path pulls capital out of the backing position, and a permissionless caller
+	///         could time that adversarially. Not throttled by stable.timelock() — that guard exists to stop
+	///         spam from arbitrary permissionless callers, which doesn't apply to the curator's own action.
+	function reconcile(bool allowMinting) external onlyCurator nonReentrant {
+		_reconcile(allowMinting);
+	}
+
 	/// @dev Reconciles totalMinted with the module's current totalAssets: if assets have grown beyond what's
 	///      been minted so far (e.g. accrued interest), realizes the deficit as revenue to the curator — either
 	///      minted or redeemed out of the backing position directly, depending on `allowMinting`. No-op if
@@ -97,7 +105,8 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenueV1, Reen
 	///      Capping this path too would only reintroduce the risk that unrecognized interest alone
 	///      permanently blocks reconciliation once totalMinted nears the cap.
 	/// @dev Updates lastReconciledAt unconditionally on every call (not just via _reconcileWithGuard), so the
-	///      throttle stays accurate even when a caller (e.g. swapOut) invokes this directly, bypassing the guard.
+	///      throttle stays accurate even when a caller (e.g. the curator-gated reconcile(bool) overload)
+	///      invokes this directly, bypassing the guard.
 	/// @dev If `allowMinting` is requested but this module is no longer a valid (non-expired) minter, silently
 	///      falls back to the redeem path instead of reverting — minting would fail anyway, and there's no
 	///      reason to block reconciliation just because minting specifically isn't available right now.
@@ -120,6 +129,8 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenueV1, Reen
 
 		emit Revenue(deficit, totalRevenue, totalMinted);
 	}
+
+	// ---------------------------------------------------------------------------------------
 
 	/// @dev Redeems `amount` (denominated in stablecoin units) worth of whatever backs this module (e.g. a
 	///      vault position) straight to the curator, without minting. Left to the concrete module, since only
