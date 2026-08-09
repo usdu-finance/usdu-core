@@ -1,0 +1,115 @@
+export const SwapRouterV1_ABI = [
+	{
+		inputs: [{ internalType: 'contract IStablecoin', name: '_stable', type: 'address' }],
+		stateMutability: 'nonpayable',
+		type: 'constructor',
+	},
+	{ inputs: [], name: 'ArrayLengthMismatch', type: 'error' },
+	{ inputs: [{ internalType: 'address', name: 'module', type: 'address' }], name: 'NotAModule', type: 'error' },
+	{ inputs: [], name: 'ReentrancyGuardReentrantCall', type: 'error' },
+	{ inputs: [{ internalType: 'address', name: 'token', type: 'address' }], name: 'SafeERC20FailedOperation', type: 'error' },
+	{
+		anonymous: false,
+		inputs: [
+			{ indexed: true, internalType: 'address', name: 'module', type: 'address' },
+			{ indexed: true, internalType: 'address', name: 'target', type: 'address' },
+			{ indexed: false, internalType: 'uint256', name: 'amountCoin', type: 'uint256' },
+			{ indexed: false, internalType: 'uint256', name: 'amountStable', type: 'uint256' },
+		],
+		name: 'SwapIn',
+		type: 'event',
+	},
+	{
+		anonymous: false,
+		inputs: [
+			{ indexed: true, internalType: 'address', name: 'module', type: 'address' },
+			{ indexed: true, internalType: 'address', name: 'target', type: 'address' },
+			{ indexed: false, internalType: 'uint256', name: 'amountStable', type: 'uint256' },
+			{ indexed: false, internalType: 'uint256', name: 'amountCoin', type: 'uint256' },
+		],
+		name: 'SwapOut',
+		type: 'event',
+	},
+	{
+		anonymous: false,
+		inputs: [
+			{ indexed: true, internalType: 'address', name: 'token', type: 'address' },
+			{ indexed: true, internalType: 'address', name: 'to', type: 'address' },
+			{ indexed: false, internalType: 'uint256', name: 'amount', type: 'uint256' },
+		],
+		name: 'Sweep',
+		type: 'event',
+	},
+	{
+		inputs: [
+			{ internalType: 'contract ISwapBridgeV1[]', name: 'modules', type: 'address[]' },
+			{ internalType: 'address[]', name: 'targets', type: 'address[]' },
+			{ internalType: 'uint256[]', name: 'amounts', type: 'uint256[]' },
+			{ internalType: 'bool[]', name: 'isSwapIn', type: 'bool[]' },
+		],
+		name: 'execute',
+		outputs: [{ internalType: 'uint256[]', name: 'amountsOut', type: 'uint256[]' }],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'stable',
+		outputs: [{ internalType: 'contract IStablecoin', name: '', type: 'address' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [
+			{ internalType: 'contract ISwapBridgeV1', name: 'module', type: 'address' },
+			{ internalType: 'uint256', name: 'amount', type: 'uint256' },
+		],
+		name: 'swapIn',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+	{
+		inputs: [
+			{ internalType: 'contract ISwapBridgeV1', name: 'module', type: 'address' },
+			{ internalType: 'address', name: 'target', type: 'address' },
+			{ internalType: 'uint256', name: 'amount', type: 'uint256' },
+		],
+		name: 'swapInTo',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+	{
+		inputs: [
+			{ internalType: 'contract ISwapBridgeV1', name: 'module', type: 'address' },
+			{ internalType: 'uint256', name: 'amount', type: 'uint256' },
+		],
+		name: 'swapOut',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+	{
+		inputs: [
+			{ internalType: 'contract ISwapBridgeV1', name: 'module', type: 'address' },
+			{ internalType: 'address', name: 'target', type: 'address' },
+			{ internalType: 'uint256', name: 'amount', type: 'uint256' },
+		],
+		name: 'swapOutTo',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+	{
+		inputs: [
+			{ internalType: 'contract IERC20', name: 'token', type: 'address' },
+			{ internalType: 'address', name: 'to', type: 'address' },
+			{ internalType: 'uint256', name: 'amount', type: 'uint256' },
+		],
+		name: 'sweep',
+		outputs: [],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+] as const;

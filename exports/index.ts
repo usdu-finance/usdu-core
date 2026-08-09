@@ -14,6 +14,16 @@ export * from './abis/curve/CurveAdapterV1_1';
 export * from './abis/curve/CurveAdapterV1_2';
 export * from './abis/curve/helper/ICurveStableSwapNG';
 
+// merkl abis
+export * from './abis/merkl/MerklRewardsV1';
+export * from './abis/merkl/helper/IMerklDistributor';
+
+// module abis
+export * from './abis/module/ModuleRevenueV1';
+export * from './abis/module/IModuleRevenueV1';
+export * from './abis/module/ModuleExpenseV1';
+export * from './abis/module/IModuleExpenseV1';
+
 // morpho abis
 export * from './abis/morpho/MorphoAdapterV1';
 export * from './abis/morpho/MorphoAdapterV1_1';
@@ -55,6 +65,13 @@ export * from './abis/stablecoin/IStablecoin';
 export * from './abis/stablecoin/IStablecoinMetadata';
 export * from './abis/stablecoin/IStablecoinModifier';
 export * from './abis/stablecoin/Stablecoin';
+
+// swap abis
+export * from './abis/swap/general/ISwapBridgeV1';
+export * from './abis/swap/morpho/SwapBridgeMorphoV1';
+export * from './abis/swap/morpho/ISwapBridgeMorphoV1';
+export * from './abis/swap/router/SwapRouterV1';
+export * from './abis/swap/router/ISwapRouterV1';
 
 // termmax abis
 export * from './abis/termmax/ITermMaxVault';

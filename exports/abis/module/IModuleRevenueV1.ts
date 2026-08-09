@@ -1,0 +1,45 @@
+export const IModuleRevenueV1_ABI = [
+	{
+		inputs: [],
+		name: 'lastReconciledAt',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'mintCap',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{ inputs: [], name: 'reconcile', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+	{
+		inputs: [{ internalType: 'bool', name: 'allowMinting', type: 'bool' }],
+		name: 'reconcile',
+		outputs: [],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'totalAssets',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'totalMinted',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'totalRevenue',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+] as const;

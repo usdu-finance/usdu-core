@@ -1,0 +1,72 @@
+export const ModuleRevenueV1_ABI = [
+	{
+		inputs: [
+			{ internalType: 'uint256', name: 'requested', type: 'uint256' },
+			{ internalType: 'uint256', name: 'cap', type: 'uint256' },
+		],
+		name: 'MintCapExceeded',
+		type: 'error',
+	},
+	{ inputs: [{ internalType: 'uint256', name: 'validAt', type: 'uint256' }], name: 'ReconcileTooSoon', type: 'error' },
+	{ inputs: [], name: 'ReentrancyGuardReentrantCall', type: 'error' },
+	{
+		anonymous: false,
+		inputs: [
+			{ indexed: false, internalType: 'uint256', name: 'amount', type: 'uint256' },
+			{ indexed: false, internalType: 'uint256', name: 'totalRevenue', type: 'uint256' },
+			{ indexed: false, internalType: 'uint256', name: 'totalMinted', type: 'uint256' },
+		],
+		name: 'Revenue',
+		type: 'event',
+	},
+	{
+		inputs: [],
+		name: 'lastReconciledAt',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'mintCap',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{ inputs: [], name: 'reconcile', outputs: [], stateMutability: 'nonpayable', type: 'function' },
+	{
+		inputs: [{ internalType: 'bool', name: 'allowMinting', type: 'bool' }],
+		name: 'reconcile',
+		outputs: [],
+		stateMutability: 'nonpayable',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'stable',
+		outputs: [{ internalType: 'contract Stablecoin', name: '', type: 'address' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'totalAssets',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'totalMinted',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'totalRevenue',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+] as const;
