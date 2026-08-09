@@ -14,6 +14,9 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenue {
 	/// @notice Thrown when a mint would push totalMinted above mintCap.
 	error MintCapExceeded(uint256 requested, uint256 cap);
 
+	/// @notice Thrown by reconcile() when called before stable.timelock() has elapsed since the last call.
+	error ReconcileTooSoon(uint256 validAt);
+
 	/// @notice Emitted when newly recognized revenue is minted to the curator.
 	event Revenue(uint256 amount, uint256 totalRevenue, uint256 totalMinted);
 
@@ -21,6 +24,7 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenue {
 
 	uint256 public totalMinted;
 	uint256 public totalRevenue;
+	uint256 public lastReconciledAt;
 
 	// ---------------------------------------------------------------------------------------
 
@@ -39,16 +43,45 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenue {
 		stable.mintModule(to, amount);
 	}
 
+	/// @notice Recognizes accrued totalAssets growth as revenue, minted to the curator. Permissionless, but
+	///         throttled to at most once per stable.timelock() to keep it from being spammed; reverts if
+	///         called again too soon.
+	function reconcile() external {
+		_reconcileWithGuard(false);
+	}
+
+	/// @dev Runs _reconcile() if at least stable.timelock() has elapsed since the last successful call. When
+	///      `pass` is true, an elapsed-guard failure is silently skipped instead of reverting, letting a
+	///      caller reconcile opportunistically without risking its own transaction.
+	function _reconcileWithGuard(bool pass) internal {
+		uint256 validAt = lastReconciledAt + stable.timelock();
+		if (block.timestamp < validAt) {
+			if (pass) return;
+			revert ReconcileTooSoon(validAt);
+		}
+
+		lastReconciledAt = block.timestamp;
+		_reconcile();
+	}
+
 	/// @dev Reconciles totalMinted with the module's current totalAssets: if assets have grown beyond what's
 	///      been minted so far (e.g. accrued interest), mints the deficit straight to the curator and
 	///      recognizes it as revenue. No-op if totalAssets has not grown past totalMinted.
+	/// @dev The mintable amount is clamped to the headroom left under mintCap rather than reverting, so that
+	///      accrued interest alone can never permanently block reconciliation (or callers that reconcile
+	///      opportunistically, e.g. before minting more). Any unrecognized remainder is picked up on a later
+	///      call once headroom opens back up.
 	function _reconcile() internal {
 		uint256 assets = this.totalAssets();
 		if (assets <= totalMinted) return;
 
 		uint256 deficit = assets - totalMinted;
-		totalRevenue += deficit;
-		_mint(stable.curator(), deficit);
-		emit Revenue(deficit, totalRevenue, totalMinted);
+		uint256 headroom = mintCap - totalMinted;
+		uint256 mintable = deficit < headroom ? deficit : headroom;
+		if (mintable == 0) return;
+
+		totalRevenue += mintable;
+		_mint(stable.curator(), mintable);
+		emit Revenue(mintable, totalRevenue, totalMinted);
 	}
 }

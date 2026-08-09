@@ -16,4 +16,7 @@ interface IModuleRevenue {
 
 	/// @notice The maximum amount this module may mint, denominated in stablecoin units.
 	function mintCap() external view returns (uint256);
+
+	/// @notice Timestamp of the last successful reconcile() call.
+	function lastReconciledAt() external view returns (uint256);
 }
