@@ -66,10 +66,10 @@ const CONFIG = {
 	mintCap: ethers.parseEther('0.1') * 1_000_000n,
 
 	// swap-in fee: coin -> stablecoin, in parts per million (e.g. 3_000 = 0.3%)
-	swapInFeePPM: 3_000n,
+	swapInFeePPM: 1_000n,
 
 	// swap-out fee: stablecoin -> coin, in parts per million (e.g. 3_000 = 0.3%)
-	swapOutFeePPM: 3_000n,
+	swapOutFeePPM: 1_000n,
 };
 
 // ---------------------------------------------------------------------------------------
