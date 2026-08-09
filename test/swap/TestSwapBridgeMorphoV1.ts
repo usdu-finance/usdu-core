@@ -124,9 +124,6 @@ describe('SwapBridgeMorphoV1', function () {
 			await expect(tx)
 				.to.emit(bridge, 'SwapIn')
 				.withArgs(user.address, amountCoin, amountStable, fee);
-			await expect(tx)
-				.to.emit(bridge, 'Revenue')
-				.withArgs(fee, fee, amountStable);
 
 			expect(await stable.balanceOf(user)).to.be.equal(amountStable - fee);
 			expect(await stable.balanceOf(curator)).to.be.equal(curatorBalanceBefore + fee);
@@ -184,8 +181,9 @@ describe('SwapBridgeMorphoV1', function () {
 			const amountStable = await stable.balanceOf(user);
 			const fee = (amountStable * SWAP_OUT_FEE_PPM) / 1_000_000n;
 			const amountCoin = ((amountStable - fee) * 10n ** 6n) / parseEther('1');
+			const feeCoin = (fee * 10n ** 6n) / parseEther('1');
 
-			const curatorBalanceBefore = await stable.balanceOf(curator);
+			const curatorCoinBalanceBefore = await usdc.balanceOf(curator);
 			const userCoinBalanceBefore = await usdc.balanceOf(user);
 			const totalMintedBefore = await bridge.totalMinted();
 			const totalRevenueBefore = await bridge.totalRevenue();
@@ -197,10 +195,11 @@ describe('SwapBridgeMorphoV1', function () {
 				.withArgs(user.address, amountStable, amountCoin, fee);
 
 			expect(await stable.balanceOf(user)).to.be.equal(0n);
-			expect(await stable.balanceOf(curator)).to.be.equal(curatorBalanceBefore + fee);
+			// fee is taken in coin, not minted, so the curator's stablecoin balance is untouched here
+			expect(await usdc.balanceOf(curator)).to.be.equal(curatorCoinBalanceBefore + feeCoin);
 			expect(await usdc.balanceOf(user)).to.be.equal(userCoinBalanceBefore + amountCoin);
 
-			expect(await bridge.totalMinted()).to.be.equal(totalMintedBefore - amountStable + fee);
+			expect(await bridge.totalMinted()).to.be.equal(totalMintedBefore - amountStable);
 			expect(await bridge.totalRevenue()).to.be.equal(totalRevenueBefore + fee);
 		});
 
@@ -224,6 +223,10 @@ describe('SwapBridgeMorphoV1', function () {
 	});
 
 	describe('reconcile', function () {
+		it('reverts when reconcile(bool) is called by a non-curator', async function () {
+			await expect(bridge.connect(user)['reconcile(bool)'](true)).to.be.reverted;
+		});
+
 		it('reverts with ReconcileTooSoon before the timelock has elapsed', async function () {
 			// earlier swapOut/swapOutTo calls also touch lastReconciledAt as a side effect (swapOut now
 			// reconciles unconditionally), so make sure it's stale before priming rather than assuming it's
@@ -231,9 +234,12 @@ describe('SwapBridgeMorphoV1', function () {
 			await evm_increaseTime(timelock + 1n);
 
 			// prime lastReconciledAt with a no-op reconcile (no yield accrued yet)
-			await bridge.reconcile();
+			await bridge.connect(curator)['reconcile(bool)'](true);
 
-			await expect(bridge.reconcile()).to.be.revertedWithCustomError(bridge, 'ReconcileTooSoon');
+			await expect(bridge.connect(curator)['reconcile(bool)'](true)).to.be.revertedWithCustomError(
+				bridge,
+				'ReconcileTooSoon'
+			);
 		});
 
 		it('mints accrued vault yield to the curator once the timelock has elapsed', async function () {
@@ -248,7 +254,8 @@ describe('SwapBridgeMorphoV1', function () {
 			const expectedMintable = assetsBefore - totalMintedBefore;
 
 			await evm_increaseTime(timelock + 1n);
-			const tx = await bridge.reconcile();
+			// permissionless no-arg reconcile() also mints when the module is still valid
+			const tx = await bridge['reconcile()']();
 
 			await expect(tx)
 				.to.emit(bridge, 'Revenue')
@@ -265,10 +272,119 @@ describe('SwapBridgeMorphoV1', function () {
 			const totalMintedBefore = await bridge.totalMinted();
 			const totalRevenueBefore = await bridge.totalRevenue();
 
-			await bridge.reconcile();
+			await bridge.connect(curator)['reconcile(bool)'](true);
 
 			expect(await bridge.totalMinted()).to.be.equal(totalMintedBefore);
 			expect(await bridge.totalRevenue()).to.be.equal(totalRevenueBefore);
+		});
+
+		it('redeems accrued vault yield to the curator as coin when allowMinting is false', async function () {
+			// simulate yield accrual by donating coin directly into the vault
+			const donation = parseUnits('20', 6);
+			await usdc.connect(usdcUser).transfer(await vault.getAddress(), donation);
+
+			const totalMintedBefore = await bridge.totalMinted();
+			const totalRevenueBefore = await bridge.totalRevenue();
+			const curatorCoinBalanceBefore = await usdc.balanceOf(curator);
+			const assetsBefore = await bridge.totalAssets();
+			const expectedDeficit = assetsBefore - totalMintedBefore;
+			const expectedCoin = (expectedDeficit * 10n ** 6n) / parseEther('1');
+
+			await evm_increaseTime(timelock + 1n);
+			const tx = await bridge.connect(curator)['reconcile(bool)'](false);
+
+			await expect(tx)
+				.to.emit(bridge, 'Revenue')
+				.withArgs(expectedDeficit, totalRevenueBefore + expectedDeficit, totalMintedBefore);
+
+			// totalMinted is untouched by the redeem path — only totalRevenue and the curator's coin move
+			expect(await bridge.totalMinted()).to.be.equal(totalMintedBefore);
+			expect(await bridge.totalRevenue()).to.be.equal(totalRevenueBefore + expectedDeficit);
+			expect(await usdc.balanceOf(curator)).to.be.equal(curatorCoinBalanceBefore + expectedCoin);
+		});
+	});
+
+	describe('post-expiry wind-down', function () {
+		// isolated bridge + vault, expired shortly after setup, so swapOut's independence from validModule
+		// (and reconcile()'s auto-fallback) can be verified directly. Generous buffers around the timelock
+		// waits below avoid flaking on the exact number of implicit block-timestamp bumps in between.
+		let localBridge: SwapBridgeMorphoV1;
+		let localVault: TestVault4626;
+
+		const amountCoin = parseUnits('1000', 6);
+
+		before(async function () {
+			const TestVault4626 = await ethers.getContractFactory('TestVault4626');
+			localVault = await TestVault4626.deploy(USDC_TOKEN);
+
+			const SwapBridgeMorphoV1 = await ethers.getContractFactory('SwapBridgeMorphoV1');
+			localBridge = await SwapBridgeMorphoV1.deploy(
+				addr.usduStable,
+				USDC_TOKEN,
+				await localVault.getAddress(),
+				MINT_CAP,
+				SWAP_IN_FEE_PPM,
+				SWAP_OUT_FEE_PPM
+			);
+
+			const expiredAt = BigInt((await ethers.provider.getBlock('latest'))!.timestamp) + timelock + 300n;
+			await stable.connect(curator).setModule(await localBridge.getAddress(), expiredAt, 'swap-bridge-morpho-wind-down');
+			await evm_increaseTime(timelock + 1n);
+			await stable.acceptModule(await localBridge.getAddress());
+
+			await usdc.connect(user).approve(await localBridge.getAddress(), amountCoin);
+			await localBridge.connect(user).swapIn(amountCoin);
+
+			// cross the expiry timestamp
+			await evm_increaseTime(300n);
+			expect(await stable.checkValidModule(await localBridge.getAddress())).to.be.equal(false);
+		});
+
+		it('swapIn reverts once the module has expired', async function () {
+			await usdc.connect(user).approve(await localBridge.getAddress(), amountCoin);
+			await expect(localBridge.connect(user).swapIn(amountCoin)).to.be.reverted;
+		});
+
+		it('swapOut still works once the module has expired, taking its fee in coin', async function () {
+			const amountStable = await stable.balanceOf(user);
+			const fee = (amountStable * SWAP_OUT_FEE_PPM) / 1_000_000n;
+			const amountCoinOut = ((amountStable - fee) * 10n ** 6n) / parseEther('1');
+			const feeCoin = (fee * 10n ** 6n) / parseEther('1');
+
+			const curatorCoinBalanceBefore = await usdc.balanceOf(curator);
+			const userCoinBalanceBefore = await usdc.balanceOf(user);
+
+			await localBridge.connect(user).swapOut(amountStable);
+
+			expect(await stable.balanceOf(user)).to.be.equal(0n);
+			expect(await usdc.balanceOf(user)).to.be.equal(userCoinBalanceBefore + amountCoinOut);
+			expect(await usdc.balanceOf(curator)).to.be.equal(curatorCoinBalanceBefore + feeCoin);
+		});
+
+		it('permissionless reconcile() auto-falls-back to redeeming instead of reverting once expired', async function () {
+			// simulate yield accrual by donating coin directly into the vault; doesn't need validModule
+			const donation = parseUnits('5', 6);
+			await usdc.connect(usdcUser).transfer(await localVault.getAddress(), donation);
+
+			const totalMintedBefore = await localBridge.totalMinted();
+			const totalRevenueBefore = await localBridge.totalRevenue();
+			const curatorCoinBalanceBefore = await usdc.balanceOf(curator);
+			const assetsBefore = await localBridge.totalAssets();
+			const expectedDeficit = assetsBefore - totalMintedBefore;
+			const expectedCoin = (expectedDeficit * 10n ** 6n) / parseEther('1');
+
+			await evm_increaseTime(timelock + 1n);
+			// called by an arbitrary, non-curator signer — reconcile() stays permissionless even post-expiry
+			const tx = await localBridge.connect(user)['reconcile()']();
+
+			await expect(tx)
+				.to.emit(localBridge, 'Revenue')
+				.withArgs(expectedDeficit, totalRevenueBefore + expectedDeficit, totalMintedBefore);
+
+			// redeemed, not minted: totalMinted is untouched, curator receives coin
+			expect(await localBridge.totalMinted()).to.be.equal(totalMintedBefore);
+			expect(await localBridge.totalRevenue()).to.be.equal(totalRevenueBefore + expectedDeficit);
+			expect(await usdc.balanceOf(curator)).to.be.equal(curatorCoinBalanceBefore + expectedCoin);
 		});
 	});
 });

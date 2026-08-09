@@ -14,8 +14,9 @@ import {ModuleRevenueV1, Stablecoin} from '../module/ModuleRevenueV1.sol';
  * @author @samclassix <samclassix@proton.me>
  * @notice A stablecoin bridge for a trusted source coin (e.g. USDC): swapping in mints stablecoin 1:1 minus a
  *         fee and puts the coin to work in an ERC4626 vault (e.g. a Morpho Vault V2); swapping out redeems the
- *         position and burns the stablecoin, again minus a fee. Accrued vault interest is periodically
- *         recognized as revenue via reconcile(), minted straight to the curator.
+ *         position and burns the stablecoin, taking its fee in coin rather than minting, so swapOut never
+ *         depends on this module still being a valid minter. Accrued vault interest is periodically recognized
+ *         as revenue via reconcile(), either minted or redeemed straight to the curator.
  */
 contract SwapBridgeMorphoV1 is ModuleRevenueV1 {
 	using Math for uint256;
@@ -84,7 +85,7 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1 {
 	}
 
 	function _swapIn(address target, uint256 amount) internal returns (uint256) {
-		_reconcileWithGuard(true);
+		_reconcileWithGuard(true, true);
 
 		coin.safeTransferFrom(_msgSender(), address(this), amount);
 
@@ -99,7 +100,6 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1 {
 		totalRevenue += fee;
 
 		emit SwapIn(target, amount, amountStable, fee);
-		emit Revenue(fee, totalRevenue, totalMinted);
 		return amountStable - fee;
 	}
 
@@ -111,26 +111,39 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1 {
 	}
 
 	/// @notice Burns `amount` of stablecoin from the caller and sends the equivalent coin, minus the swap-out
-	///         fee, to `target`.
+	///         fee, to `target`. The fee is taken in coin (not minted), so this never depends on the module
+	///         still being a valid minter — it keeps working even after this module has expired.
 	function swapOutTo(address target, uint256 amount) external nonReentrant returns (uint256) {
 		return _swapOut(target, amount);
 	}
 
 	function _swapOut(address target, uint256 amount) internal returns (uint256) {
-		_reconcile();
+		_reconcile(false);
 
 		stable.burnModule(_msgSender(), amount);
 		totalMinted -= amount;
 
 		uint256 fee = amount.mulDiv(swapOutFeePPM, 1_000_000);
-		_mint(stable.curator(), fee);
 		totalRevenue += fee;
 
 		uint256 amountCoin = ((amount - fee) * 10 ** coin.decimals()) / 1 ether;
+		uint256 feeCoin = (fee * 10 ** coin.decimals()) / 1 ether;
+
 		vault.withdraw(amountCoin, target, address(this));
+		if (feeCoin > 0) vault.withdraw(feeCoin, stable.curator(), address(this));
 
 		emit SwapOut(target, amount, amountCoin, fee);
-		emit Revenue(fee, totalRevenue, totalMinted);
 		return amountCoin;
+	}
+
+	// ---------------------------------------------------------------------------------------
+
+	/// @dev Redeems `amount` (denominated in stablecoin units) worth of this bridge's vault position, sending
+	///      the resulting coin straight to the curator.
+	function _redeemAssets(uint256 amount) internal override {
+		uint256 amountCoin = (amount * 10 ** coin.decimals()) / 1 ether;
+		if (amountCoin == 0) return;
+
+		vault.withdraw(amountCoin, stable.curator(), address(this));
 	}
 }
