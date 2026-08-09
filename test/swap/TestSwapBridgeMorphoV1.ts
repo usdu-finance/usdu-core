@@ -225,6 +225,11 @@ describe('SwapBridgeMorphoV1', function () {
 
 	describe('reconcile', function () {
 		it('reverts with ReconcileTooSoon before the timelock has elapsed', async function () {
+			// earlier swapOut/swapOutTo calls also touch lastReconciledAt as a side effect (swapOut now
+			// reconciles unconditionally), so make sure it's stale before priming rather than assuming it's
+			// still at its initial value
+			await evm_increaseTime(timelock + 1n);
+
 			// prime lastReconciledAt with a no-op reconcile (no yield accrued yet)
 			await bridge.reconcile();
 

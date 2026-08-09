@@ -73,17 +73,19 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1 {
 	// ---------------------------------------------------------------------------------------
 
 	/// @notice Convenience method for swapInTo(msg.sender, amount).
-	function swapIn(uint256 amount) external returns (uint256) {
+	function swapIn(uint256 amount) external nonReentrant returns (uint256) {
 		return _swapIn(_msgSender(), amount);
 	}
 
 	/// @notice Swaps `amount` of coin into stablecoin, minted to `target` minus the swap-in fee.
 	/// @dev The caller must have approved this contract to pull `amount` of coin beforehand.
-	function swapInTo(address target, uint256 amount) external returns (uint256) {
+	function swapInTo(address target, uint256 amount) external nonReentrant returns (uint256) {
 		return _swapIn(target, amount);
 	}
 
 	function _swapIn(address target, uint256 amount) internal returns (uint256) {
+		_reconcileWithGuard(true);
+
 		coin.safeTransferFrom(_msgSender(), address(this), amount);
 
 		coin.forceApprove(address(vault), amount);
@@ -92,7 +94,7 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1 {
 		uint256 amountStable = (amount * 1 ether) / 10 ** coin.decimals();
 		uint256 fee = amountStable.mulDiv(swapInFeePPM, 1_000_000);
 
-		_mint(target, amountStable - fee);
+		_mintWithCap(target, amountStable - fee);
 		_mint(stable.curator(), fee);
 		totalRevenue += fee;
 
@@ -104,17 +106,19 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1 {
 	// ---------------------------------------------------------------------------------------
 
 	/// @notice Convenience method for swapOutTo(msg.sender, amount).
-	function swapOut(uint256 amount) external returns (uint256) {
+	function swapOut(uint256 amount) external nonReentrant returns (uint256) {
 		return _swapOut(_msgSender(), amount);
 	}
 
 	/// @notice Burns `amount` of stablecoin from the caller and sends the equivalent coin, minus the swap-out
 	///         fee, to `target`.
-	function swapOutTo(address target, uint256 amount) external returns (uint256) {
+	function swapOutTo(address target, uint256 amount) external nonReentrant returns (uint256) {
 		return _swapOut(target, amount);
 	}
 
 	function _swapOut(address target, uint256 amount) internal returns (uint256) {
+		_reconcile();
+
 		stable.burnModule(_msgSender(), amount);
 		totalMinted -= amount;
 
