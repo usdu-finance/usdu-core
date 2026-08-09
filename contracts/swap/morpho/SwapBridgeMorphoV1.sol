@@ -45,13 +45,11 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1, ISwapBridgeMorphoV1 {
 	// ---------------------------------------------------------------------------------------
 
 	error InvalidFee(uint24 feePPM);
-	error InvalidVault(address vault, address coin);
 
 	// ---------------------------------------------------------------------------------------
 
 	constructor(
 		Stablecoin _stable,
-		IERC20Metadata _coin,
 		IERC4626 _vault,
 		uint256 _mintCap,
 		uint24 _swapInFeePPM,
@@ -59,9 +57,8 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1, ISwapBridgeMorphoV1 {
 	) ModuleRevenueV1(_stable, _mintCap) {
 		if (_swapInFeePPM > 1_000_000) revert InvalidFee(_swapInFeePPM);
 		if (_swapOutFeePPM > 1_000_000) revert InvalidFee(_swapOutFeePPM);
-		if (_vault.asset() != address(_coin)) revert InvalidVault(address(_vault), address(_coin));
 
-		coin = _coin;
+		coin = IERC20Metadata(_vault.asset());
 		vault = _vault;
 		swapInFeePPM = _swapInFeePPM;
 		swapOutFeePPM = _swapOutFeePPM;

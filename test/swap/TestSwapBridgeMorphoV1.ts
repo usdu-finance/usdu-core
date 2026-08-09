@@ -48,14 +48,7 @@ describe('SwapBridgeMorphoV1', function () {
 		vault = await TestVault4626.deploy(USDC_TOKEN);
 
 		const SwapBridgeMorphoV1 = await ethers.getContractFactory('SwapBridgeMorphoV1');
-		bridge = await SwapBridgeMorphoV1.deploy(
-			addr.usduStable,
-			USDC_TOKEN,
-			await vault.getAddress(),
-			MINT_CAP,
-			SWAP_IN_FEE_PPM,
-			SWAP_OUT_FEE_PPM
-		);
+		bridge = await SwapBridgeMorphoV1.deploy(addr.usduStable, await vault.getAddress(), MINT_CAP, SWAP_IN_FEE_PPM, SWAP_OUT_FEE_PPM);
 
 		// fund curator with eth so it can send transactions
 		await deployer.sendTransaction({ to: curator.address, value: parseEther('10') });
@@ -73,32 +66,15 @@ describe('SwapBridgeMorphoV1', function () {
 		it('reverts with InvalidFee when swapInFeePPM exceeds 100%', async function () {
 			const Factory = await ethers.getContractFactory('SwapBridgeMorphoV1');
 			await expect(
-				Factory.deploy(addr.usduStable, USDC_TOKEN, await vault.getAddress(), MINT_CAP, 1_000_001, SWAP_OUT_FEE_PPM)
+				Factory.deploy(addr.usduStable, await vault.getAddress(), MINT_CAP, 1_000_001, SWAP_OUT_FEE_PPM)
 			).to.be.revertedWithCustomError(Factory, 'InvalidFee');
 		});
 
 		it('reverts with InvalidFee when swapOutFeePPM exceeds 100%', async function () {
 			const Factory = await ethers.getContractFactory('SwapBridgeMorphoV1');
 			await expect(
-				Factory.deploy(addr.usduStable, USDC_TOKEN, await vault.getAddress(), MINT_CAP, SWAP_IN_FEE_PPM, 1_000_001)
+				Factory.deploy(addr.usduStable, await vault.getAddress(), MINT_CAP, SWAP_IN_FEE_PPM, 1_000_001)
 			).to.be.revertedWithCustomError(Factory, 'InvalidFee');
-		});
-
-		it('reverts with InvalidVault when the vault asset does not match coin', async function () {
-			const TestVault4626 = await ethers.getContractFactory('TestVault4626');
-			const mismatchedVault = await TestVault4626.deploy(addr.usduStable); // asset() == stable, not USDC
-
-			const Factory = await ethers.getContractFactory('SwapBridgeMorphoV1');
-			await expect(
-				Factory.deploy(
-					addr.usduStable,
-					USDC_TOKEN,
-					await mismatchedVault.getAddress(),
-					MINT_CAP,
-					SWAP_IN_FEE_PPM,
-					SWAP_OUT_FEE_PPM
-				)
-			).to.be.revertedWithCustomError(Factory, 'InvalidVault');
 		});
 
 		it('deploys correctly and exposes immutables', async function () {
@@ -159,7 +135,6 @@ describe('SwapBridgeMorphoV1', function () {
 			const SwapBridgeMorphoV1 = await ethers.getContractFactory('SwapBridgeMorphoV1');
 			const smallBridge = await SwapBridgeMorphoV1.deploy(
 				addr.usduStable,
-				USDC_TOKEN,
 				await smallVault.getAddress(),
 				smallMintCap,
 				SWAP_IN_FEE_PPM,
@@ -359,7 +334,6 @@ describe('SwapBridgeMorphoV1', function () {
 			const SwapBridgeMorphoV1 = await ethers.getContractFactory('SwapBridgeMorphoV1');
 			localBridge = await SwapBridgeMorphoV1.deploy(
 				addr.usduStable,
-				USDC_TOKEN,
 				await localVault.getAddress(),
 				MINT_CAP,
 				SWAP_IN_FEE_PPM,
@@ -442,7 +416,6 @@ describe('SwapBridgeMorphoV1', function () {
 			const SwapBridgeMorphoV1 = await ethers.getContractFactory('SwapBridgeMorphoV1');
 			localBridge = await SwapBridgeMorphoV1.deploy(
 				addr.usduStable,
-				USDC_TOKEN,
 				await localVault.getAddress(),
 				MINT_CAP,
 				SWAP_IN_FEE_PPM,

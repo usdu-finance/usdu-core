@@ -52,6 +52,71 @@ export function resolveArgs(argv: string[]): { network: Network; execute: boolea
 	return { network: (requested ?? 'mainnet') as Network, execute };
 }
 
+/**
+ * Parses `npx tsx <script> <address> [network] [true]` — like resolveArgs, but with a required leading
+ * address positional (e.g. a vault to introspect before deploying against it).
+ */
+export function resolveArgsWithAddress(argv: string[], addressLabel: string): { address: string; network: Network; execute: boolean } {
+	const args = argv.slice(2);
+	const execute = args[args.length - 1] === 'true';
+	const rest = execute ? args.slice(0, -1) : args;
+
+	const address = rest[0];
+	if (!address || !ethers.isAddress(address)) {
+		throw new Error(`Missing or invalid ${addressLabel} address as the first argument.`);
+	}
+
+	const requested = rest[1];
+	if (requested && !(requested in CHAINS)) {
+		throw new Error(`Unknown network "${requested}" — expected one of: ${Object.keys(CHAINS).join(', ')}`);
+	}
+
+	return { address, network: (requested ?? 'mainnet') as Network, execute };
+}
+
+const ERC20_ABI = ['function name() view returns (string)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)'];
+
+const ERC4626_ABI = [
+	...ERC20_ABI,
+	'function asset() view returns (address)',
+	'function totalAssets() view returns (uint256)',
+	'function totalSupply() view returns (uint256)',
+];
+
+export interface ERC20Details {
+	address: string;
+	name: string;
+	symbol: string;
+	decimals: bigint;
+}
+
+export interface ERC4626Details extends ERC20Details {
+	asset: string;
+	totalAssets: bigint;
+	totalSupply: bigint;
+}
+
+/** Reads name/symbol/decimals off a plain ERC20 — used here to describe the vault's underlying coin. */
+export async function getERC20Details(provider: ethers.JsonRpcProvider, address: string): Promise<ERC20Details> {
+	const token = new ethers.Contract(address, ERC20_ABI, provider);
+	const [name, symbol, decimals] = await Promise.all([token.name(), token.symbol(), token.decimals()]);
+	return { address, name, symbol, decimals };
+}
+
+/** Reads name/symbol/decimals/asset/totalAssets/totalSupply off an ERC4626 vault, before wiring it in. */
+export async function getERC4626Details(provider: ethers.JsonRpcProvider, address: string): Promise<ERC4626Details> {
+	const vault = new ethers.Contract(address, ERC4626_ABI, provider);
+	const [name, symbol, decimals, asset, totalAssets, totalSupply] = await Promise.all([
+		vault.name(),
+		vault.symbol(),
+		vault.decimals(),
+		vault.asset(),
+		vault.totalAssets(),
+		vault.totalSupply(),
+	]);
+	return { address, name, symbol, decimals, asset, totalAssets, totalSupply };
+}
+
 export function getProvider(network: Network): ethers.JsonRpcProvider {
 	const alchemyKey = process.env.ALCHEMY_RPC_KEY;
 	if (!alchemyKey && network !== 'citrea') throw new Error('Missing ALCHEMY_RPC_KEY in .env');
