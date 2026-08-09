@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.20;
 
+import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+
 import {IStablecoin} from '../../stablecoin/IStablecoin.sol';
 
 import {ISwapBridgeV1} from '../general/ISwapBridgeV1.sol';
@@ -40,4 +42,8 @@ interface ISwapRouterV1 {
 		uint256[] calldata amounts,
 		bool[] calldata isSwapIn
 	) external returns (uint256[] memory amountsOut);
+
+	/// @notice Recovers `token` balance accidentally stranded in this router back to `to`.
+	/// @dev Callable only by the curator.
+	function sweep(IERC20 token, address to, uint256 amount) external;
 }

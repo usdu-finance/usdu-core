@@ -32,6 +32,7 @@ contract SwapRouterV1 is ISwapRouterV1, ReentrancyGuard {
 
 	event SwapIn(address indexed module, address indexed target, uint256 amountCoin, uint256 amountStable);
 	event SwapOut(address indexed module, address indexed target, uint256 amountStable, uint256 amountCoin);
+	event Sweep(address indexed token, address indexed to, uint256 amount);
 
 	// ---------------------------------------------------------------------------------------
 
@@ -119,6 +120,19 @@ contract SwapRouterV1 is ISwapRouterV1, ReentrancyGuard {
 				? _swapIn(modules[i], targets[i], amounts[i])
 				: _swapOut(modules[i], targets[i], amounts[i]);
 		}
+	}
+
+	// ---------------------------------------------------------------------------------------
+
+	/// @notice Recovers `token` balance accidentally stranded in this router (e.g. sent directly, or left
+	///         behind by a `target` mistakenly set to this router) back to `to`. Curator-gated: the router
+	///         never intentionally retains a balance of its own, so anything sitting here belongs to whoever
+	///         sent it by mistake, not to this contract or its curator - this exists purely as a recovery path.
+	function sweep(IERC20 token, address to, uint256 amount) external nonReentrant {
+		stable.verifyCurator(msg.sender);
+
+		token.safeTransfer(to, amount);
+		emit Sweep(address(token), to, amount);
 	}
 
 	// ---------------------------------------------------------------------------------------
