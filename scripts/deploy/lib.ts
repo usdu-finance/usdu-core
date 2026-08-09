@@ -33,6 +33,14 @@ export const USDU_STABLE_BY_NETWORK: Partial<Record<Network, string>> = {
 	mainnet: '0xdde3ec717f220fc6a29d6a4be73f91da5b718e55',
 };
 
+// Merkl's Distributor contract — deployed at the same address on the vast majority of EVM chains, mainnet,
+// arbitrum and base among them (see https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses).
+export const MERKL_DISTRIBUTOR_BY_NETWORK: Partial<Record<Network, string>> = {
+	mainnet: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
+	arbitrum: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
+	base: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
+};
+
 // ---------------------------------------------------------------------------------------
 
 /**

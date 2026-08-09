@@ -28,7 +28,11 @@ abstract contract MerklRewardsV1 is IStablecoinModifier, ReentrancyGuard {
 
 	// ---------------------------------------------------------------------------------------
 
-	constructor(Stablecoin _stable, IMerklDistributor _distributor) IStablecoinModifier(_stable) {
+	/// @dev Deliberately doesn't forward `_stable` to IStablecoinModifier's constructor: a concrete module that
+	///      combines this with another IStablecoinModifier-derived abstract (e.g. ModuleRevenueV1) would
+	///      otherwise hit Solidity's "base constructor arguments given twice" diamond-inheritance error, so the
+	///      concrete contract supplies IStablecoinModifier(_stable) itself instead.
+	constructor(Stablecoin /* _stable */, IMerklDistributor _distributor) {
 		distributor = _distributor;
 	}
 

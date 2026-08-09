@@ -24,6 +24,10 @@ export const ADDRESS: ChainAddressMap = {
 		curveStableSwapNG_USDCUSDU: '0x6C5Ff8DCe52BE77b4eCE6B51996018f0C1713bA9',
 		curveStableSwapNG_USDCUSDU_gauge: '0xbB6eDb6E10fC89F1032F3c4DdB2e73d1BeDa423f',
 
+		// external protocols
+		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base
+		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
+
 		// swap modules and utils
 		swapRouterV1: zeroAddress,
 		swapBridgeMorphoV1_steakUSDC_vault: zeroAddress,
@@ -33,11 +37,19 @@ export const ADDRESS: ChainAddressMap = {
 		// identifier
 		chainId: 42161,
 		chainSelector: '4949039107694359620',
+
+		// external protocols
+		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base
+		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 	},
 	[base.id]: {
 		// identifier
 		chainId: 8453,
 		chainSelector: '15971525489660198786',
+
+		// external protocols
+		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base
+		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 	},
 	[citrea.id]: {
 		// identifier

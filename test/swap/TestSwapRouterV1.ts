@@ -49,7 +49,14 @@ describe('SwapRouterV1', function () {
 		vault = await TestVault4626.deploy(USDC_TOKEN);
 
 		const SwapBridgeMorphoV1 = await ethers.getContractFactory('SwapBridgeMorphoV1');
-		bridge = await SwapBridgeMorphoV1.deploy(addr.usduStable, await vault.getAddress(), MINT_CAP, SWAP_IN_FEE_PPM, SWAP_OUT_FEE_PPM);
+		bridge = await SwapBridgeMorphoV1.deploy(
+			addr.usduStable,
+			addr.merklDistributor,
+			await vault.getAddress(),
+			MINT_CAP,
+			SWAP_IN_FEE_PPM,
+			SWAP_OUT_FEE_PPM
+		);
 
 		const SwapRouterV1 = await ethers.getContractFactory('SwapRouterV1');
 		router = await SwapRouterV1.deploy(addr.usduStable);
@@ -192,6 +199,7 @@ describe('SwapRouterV1', function () {
 				const SwapBridgeMorphoV1 = await ethers.getContractFactory('SwapBridgeMorphoV1');
 				localBridge = await SwapBridgeMorphoV1.deploy(
 					addr.usduStable,
+					addr.merklDistributor,
 					await localVault.getAddress(),
 					MINT_CAP,
 					SWAP_IN_FEE_PPM,

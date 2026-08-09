@@ -30,6 +30,8 @@
  * Args (constructor args for SwapBridgeMorphoV1):
  *   stable        - address of the IStablecoin this bridge mints/burns. Taken from USDU_STABLE_BY_NETWORK
  *                   in lib.ts for the selected network.
+ *   distributor   - Merkl's Distributor contract, for claiming incentives accrued on the vault position.
+ *                   Taken from MERKL_DISTRIBUTOR_BY_NETWORK in lib.ts for the selected network.
  *   vault         - the ERC4626 vault the coin is deposited into. Passed as the CLI <vault> arg above.
  *   mintCap       - max stablecoin this bridge may mint against new deposits (18 decimals). Set in CONFIG
  *                   below — review before deploying.
@@ -42,6 +44,7 @@ import { ethers } from 'ethers';
 
 import {
 	CHAINS,
+	MERKL_DISTRIBUTOR_BY_NETWORK,
 	USDU_STABLE_BY_NETWORK,
 	deployViaCreate2,
 	getERC20Details,
@@ -78,6 +81,10 @@ async function main() {
 	const stable = USDU_STABLE_BY_NETWORK[network];
 	if (!stable) throw new Error(`No usduStable configured for network "${network}". Set USDU_STABLE_BY_NETWORK in lib.ts.`);
 
+	const distributor = MERKL_DISTRIBUTOR_BY_NETWORK[network];
+	if (!distributor)
+		throw new Error(`No Merkl distributor configured for network "${network}". Set MERKL_DISTRIBUTOR_BY_NETWORK in lib.ts.`);
+
 	const provider = getProvider(network);
 	const wallet = getWallet(provider);
 
@@ -108,7 +115,7 @@ async function main() {
 	console.log('');
 
 	const { abi, bytecode } = loadArtifact('contracts/swap/morpho/SwapBridgeMorphoV1.sol', 'SwapBridgeMorphoV1');
-	const args = [stable, vaultAddress, CONFIG.mintCap, CONFIG.swapInFeePPM, CONFIG.swapOutFeePPM] as const;
+	const args = [stable, distributor, vaultAddress, CONFIG.mintCap, CONFIG.swapInFeePPM, CONFIG.swapOutFeePPM] as const;
 	const encodedArgs = new ethers.Interface(abi).encodeDeploy(args);
 	const predictedAddress = predictCreate2Address(bytecode, encodedArgs, SALT);
 
@@ -117,6 +124,7 @@ async function main() {
 	console.log('');
 	console.log('Constructor args:');
 	console.log('  stable:       ', stable);
+	console.log('  distributor:  ', distributor);
 	console.log('  vault:        ', vaultAddress);
 	console.log('  mintCap:      ', ethers.formatEther(CONFIG.mintCap));
 	console.log('  swapInFeePPM: ', CONFIG.swapInFeePPM.toString(), `(${Number(CONFIG.swapInFeePPM) / 10_000}%)`);

@@ -8,6 +8,8 @@ import {IERC4626} from '@openzeppelin/contracts/interfaces/IERC4626.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
 import {ModuleRevenueV1, Stablecoin} from '../../module/ModuleRevenueV1.sol';
+import {MerklRewardsV1} from '../../merkl/MerklRewardsV1.sol';
+import {IMerklDistributor} from '../../merkl/helpers/IMerklDistributor.sol';
 
 import {ISwapBridgeMorphoV1} from './ISwapBridgeMorphoV1.sol';
 
@@ -20,8 +22,11 @@ import {ISwapBridgeMorphoV1} from './ISwapBridgeMorphoV1.sol';
  *         opportunistically reconcile accrued vault interest as revenue, either minted to the curator or
  *         redeemed as coin depending on whether the module is still a valid minter — so swapOut in particular
  *         never depends on that validity to succeed, and keeps working even after this module has expired.
+ * @dev Also inherits MerklRewardsV1: the vault position held here (e.g. a Morpho Vault V2) commonly accrues
+ *      Merkl-distributed incentives on top of its own yield, which the curator can claim via claimRewards()
+ *      independently of the swap/reconcile flow above.
  */
-contract SwapBridgeMorphoV1 is ModuleRevenueV1, ISwapBridgeMorphoV1 {
+contract SwapBridgeMorphoV1 is ModuleRevenueV1, MerklRewardsV1, ISwapBridgeMorphoV1 {
 	using Math for uint256;
 	using SafeERC20 for IERC20Metadata;
 
@@ -50,11 +55,12 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1, ISwapBridgeMorphoV1 {
 
 	constructor(
 		Stablecoin _stable,
+		IMerklDistributor _distributor,
 		IERC4626 _vault,
 		uint256 _mintCap,
 		uint24 _swapInFeePPM,
 		uint24 _swapOutFeePPM
-	) ModuleRevenueV1(_stable, _mintCap) {
+	) ModuleRevenueV1(_stable, _mintCap) MerklRewardsV1(_stable, _distributor) {
 		if (_swapInFeePPM > 1_000_000) revert InvalidFee(_swapInFeePPM);
 		if (_swapOutFeePPM > 1_000_000) revert InvalidFee(_swapOutFeePPM);
 

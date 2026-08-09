@@ -50,6 +50,9 @@ export type ChainAddressMainnet = {
 	curveStableSwapNG_USDCUSDU: Address;
 	curveStableSwapNG_USDCUSDU_gauge: Address;
 
+	// external protocols
+	merklDistributor: Address;
+
 	// swap modules and utils
 	swapRouterV1: Address;
 	swapBridgeMorphoV1_steakUSDC_vault: Address;
@@ -60,12 +63,18 @@ export type ChainAddressArbitrum = {
 	// identifier
 	chainId: typeof arbitrum.id;
 	chainSelector: string;
+
+	// external protocols
+	merklDistributor: Address;
 };
 
 export type ChainAddressBase = {
 	// identifier
 	chainId: typeof base.id;
 	chainSelector: string;
+
+	// external protocols
+	merklDistributor: Address;
 };
 
 export type ChainAddressCitrea = {
