@@ -1,6 +1,5 @@
 import { arbitrum, base, citrea, mainnet } from 'viem/chains';
 import { ChainAddressMap } from './address.types';
-import { zeroAddress } from 'viem';
 
 export const ADDRESS: ChainAddressMap = {
 	[mainnet.id]: {
@@ -29,9 +28,11 @@ export const ADDRESS: ChainAddressMap = {
 		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 
 		// swap modules and utils
-		swapRouterV1: zeroAddress,
-		swapBridgeMorphoV1_steakUSDC_vault: zeroAddress,
-		swapBridgeMorphoV1_steakUSDC_module: zeroAddress,
+		swapRouterV1: '0x2A51F412B4E3fc3a43605B8EB9917facF5b5a08E',
+		swapBridgeMorphoV1_steakUSDC_vault: '0xbeef088055857739C12CD3765F20b7679Def0f51',
+		swapBridgeMorphoV1_steakUSDC_module: '0x6b6893d82edbC8d6769ba3c407102D33dA2B623f',
+		swapBridgeMorphoV1_steakUSDT_vault: '0xbeef003C68896c7D2c3c60d363e8d71a49Ab2bf9',
+		swapBridgeMorphoV1_steakUSDT_module: '0xd9141f634Ef9E871A5FE4f64195747DB77A13f3E',
 	},
 	[arbitrum.id]: {
 		// identifier

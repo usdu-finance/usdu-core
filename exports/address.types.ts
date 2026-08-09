@@ -57,6 +57,8 @@ export type ChainAddressMainnet = {
 	swapRouterV1: Address;
 	swapBridgeMorphoV1_steakUSDC_vault: Address;
 	swapBridgeMorphoV1_steakUSDC_module: Address;
+	swapBridgeMorphoV1_steakUSDT_vault: Address;
+	swapBridgeMorphoV1_steakUSDT_module: Address;
 };
 
 export type ChainAddressArbitrum = {
