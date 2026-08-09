@@ -43,6 +43,8 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenue {
 		stable.mintModule(to, amount);
 	}
 
+	// ---------------------------------------------------------------------------------------
+
 	/// @notice Recognizes accrued totalAssets growth as revenue, minted to the curator. Permissionless, but
 	///         throttled to at most once per stable.timelock() to keep it from being spammed; reverts if
 	///         called again too soon.

@@ -3,7 +3,8 @@ pragma solidity ^0.8.20;
 
 /// @title IModuleRevenue
 /// @notice Common accounting surface for stablecoin modules, exposing assets, liabilities and revenue in
-///         stablecoin units so callers (e.g. a registry or dashboard) can read any module polymorphically.
+///         stablecoin units so callers (e.g. a registry, dashboard, or keeper) can read and reconcile any
+///         module polymorphically.
 interface IModuleRevenue {
 	/// @notice The module's assets, denominated in stablecoin units.
 	function totalAssets() external view returns (uint256);
@@ -19,4 +20,7 @@ interface IModuleRevenue {
 
 	/// @notice Timestamp of the last successful reconcile() call.
 	function lastReconciledAt() external view returns (uint256);
+
+	/// @notice Recognizes accrued totalAssets growth as revenue, minted to the curator.
+	function reconcile() external;
 }
