@@ -23,6 +23,11 @@ export const ADDRESS: ChainAddressMap = {
 		// https://www.curve.finance/dex/ethereum/pools/factory-stable-ng-596
 		curveStableSwapNG_USDCUSDU: '0x6C5Ff8DCe52BE77b4eCE6B51996018f0C1713bA9',
 		curveStableSwapNG_USDCUSDU_gauge: '0xbB6eDb6E10fC89F1032F3c4DdB2e73d1BeDa423f',
+
+		// swap modules and utils
+		swapRouterV1: zeroAddress,
+		swapBridgeMorphoV1_steakUSDC_vault: zeroAddress,
+		swapBridgeMorphoV1_steakUSDC_module: zeroAddress,
 	},
 	[arbitrum.id]: {
 		// identifier
