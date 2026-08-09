@@ -7,9 +7,10 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-import {Stablecoin} from '../../stablecoin/Stablecoin.sol';
+import {IStablecoin} from '../../stablecoin/IStablecoin.sol';
 
 import {ISwapBridgeV1} from '../general/ISwapBridgeV1.sol';
+import {ISwapRouterV1} from './ISwapRouterV1.sol';
 
 /**
  * @title SwapRouterV1
@@ -20,12 +21,12 @@ import {ISwapBridgeV1} from '../general/ISwapBridgeV1.sol';
  *         to this router is ever needed. The router never retains a balance across transactions: it only ever
  *         holds funds transiently, between pulling them from the caller and forwarding them to the module.
  */
-contract SwapRouterV1 is ReentrancyGuard {
+contract SwapRouterV1 is ISwapRouterV1, ReentrancyGuard {
 	using SafeERC20 for IERC20;
 	using SafeERC20 for IERC20Metadata;
 
 	/// @notice The stablecoin whose registered modules this router may forward calls to.
-	Stablecoin public immutable stable;
+	IStablecoin public immutable stable;
 
 	// ---------------------------------------------------------------------------------------
 
@@ -37,9 +38,12 @@ contract SwapRouterV1 is ReentrancyGuard {
 	/// @notice Thrown when `module` is not (or is no longer) registered as a module on `stable`.
 	error NotAModule(address module);
 
+	/// @notice Thrown by execute() when `modules`, `targets`, `amounts` and `isSwapIn` don't all have the same length.
+	error ArrayLengthMismatch();
+
 	// ---------------------------------------------------------------------------------------
 
-	constructor(Stablecoin _stable) {
+	constructor(IStablecoin _stable) {
 		stable = _stable;
 	}
 
@@ -90,6 +94,31 @@ contract SwapRouterV1 is ReentrancyGuard {
 		uint256 amountCoin = module.swapOutTo(target, amount);
 		emit SwapOut(address(module), target, amount, amountCoin);
 		return amountCoin;
+	}
+
+	// ---------------------------------------------------------------------------------------
+
+	/// @notice Batches multiple swaps into a single transaction, each independently a swapIn or a swapOut and
+	///         each free to go through a different module. Swap `i` is described by `modules[i]`, `targets[i]`,
+	///         `amounts[i]` and `isSwapIn[i]`; all four arrays must have the same length. The whole batch
+	///         reverts if any single swap in it fails.
+	function execute(
+		ISwapBridgeV1[] calldata modules,
+		address[] calldata targets,
+		uint256[] calldata amounts,
+		bool[] calldata isSwapIn
+	) external nonReentrant returns (uint256[] memory amountsOut) {
+		uint256 length = modules.length;
+		if (targets.length != length || amounts.length != length || isSwapIn.length != length) {
+			revert ArrayLengthMismatch();
+		}
+
+		amountsOut = new uint256[](length);
+		for (uint256 i = 0; i < length; ++i) {
+			amountsOut[i] = isSwapIn[i]
+				? _swapIn(modules[i], targets[i], amounts[i])
+				: _swapOut(modules[i], targets[i], amounts[i]);
+		}
 	}
 
 	// ---------------------------------------------------------------------------------------
