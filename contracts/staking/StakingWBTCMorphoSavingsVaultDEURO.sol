@@ -7,14 +7,12 @@ import {ERC4626, ERC20, IERC20, IERC4626} from '@openzeppelin/contracts/token/ER
 import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
+import {ISwapRouter} from '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
 
 import {IMorpho, MarketParams, Market, Position, Id} from '../morpho/helpers/IMorpho.sol';
 import {MarketParamsLib} from '../morpho/helpers/MarketParamsLib.sol';
 import {SharesMathLib} from '../morpho/helpers/SharesMathLib.sol';
 import {IOracle} from '../morpho/helpers/IOracle.sol';
-
-import {GPv2Order} from '../cow/helpers/GPv2Order.sol';
-import {IGPv2Settlement} from '../cow/helpers/IGPv2Settlement.sol';
 
 import {IStablecoinBridge} from './helpers/IStablecoinBridge.sol';
 import {ISavingsVault} from './helpers/ISavingsVault.sol';
@@ -27,26 +25,32 @@ import {IStakingWBTCMorphoSavingsVaultDEURO} from './IStakingWBTCMorphoSavingsVa
  *         market (WBTC collateral / EURC loan). The vault then runs a leveraged carry trade against that
  *         collateral: it borrows EURC, bridges it 1:1 into dEURO (IStablecoinBridge), and deposits the
  *         dEURO into `savingsVault` (a SavingsVault holding svDEURO) to earn the dEURO savings rate.
- *         `_leverage`/`_deleverage` grow or shrink that borrow-and-invest position to track `targetLtv`
- *         (within `targetBand`) as WBTC/EUR price and Morpho's own borrow accrual move the position around.
  *
- *         The spread between the dEURO savings rate and the Morpho EURC borrow rate is the vault's yield.
- *         It is realized by `_reconcile`: redeemable savingsVault value above `savingsPrincipal` (the
- *         dEURO principal actually invested) is claimed, bridged back to EURC, and sold for WBTC through a
- *         CoW Swap intent (`_swap`, presigned on GPv2Settlement rather than executed atomically, since a
- *         solver may take time to fill it). Once filled, the WBTC proceeds are supplied as additional
- *         collateral, compounding the position.
+ * @dev Two independent, self-contained mechanisms keep the position healthy and growing:
  *
- * @dev `checkRebalance`/`rebalance` decide between four mutually exclusive actions — settling a filled or
- *      expired CoW order, reconciling claimable interest, leveraging, or deleveraging — and take at most
- *      one of them per call, so a keeper is expected to call `rebalance()` repeatedly until it reports
- *      Action.NONE. This keeps each on-chain step small and its effect easy to reason about, at the cost
- *      of needing multiple transactions (and, for the CoW leg, waiting for a solver) to fully settle.
+ *      1. `checkUpkeep`/`performUpkeep` (Chainlink Automation's actual interface, so this vault can be
+ *         registered as an upkeep as-is) track `targetLtv +/- targetBand`: if the LTV drifts above the
+ *         band, `_deleverage` redeems dEURO principal out of `savingsVault`, bridges it back to EURC, and
+ *         repays Morpho; if it drifts below, `_leverage` borrows more EURC and deposits it into
+ *         `savingsVault`. Neither direction needs external price data, so both stay honestly
+ *         Automation-compatible: `performUpkeep` never trusts `performData`, it always recomputes the
+ *         action live.
+ *
+ *      2. `reconcile` realizes the yield: whenever `savingsVault`'s live redeemable value exceeds the
+ *         live Morpho debt (both read fresh, no cost-basis bookkeeping needed), it borrows exactly that
+ *         surplus — rather than redeeming it out of savings — and swaps the freshly-borrowed EURC for
+ *         WBTC through a fixed Uniswap V3 router, supplying the proceeds as collateral. Borrowing instead of
+ *         redeeming leaves the existing savings position fully invested and compounding. This is the one
+ *         operation that needs a live swap route, which can't be produced inside an on-chain simulation
+ *         (`checkUpkeep` is a plain `eth_call`, it can't fetch a quote), so it is intentionally kept
+ *         outside the Automation interface: a keeper supplies the swap `path` directly, with amountIn,
+ *         amountOutMin, `to` and `deadline` all computed on-chain — the only trust placed in the path is
+ *         the oracle-anchored minimum-output check enforced by the router itself, so a bad path just
+ *         reverts, it can never drain more than the surplus being reconciled.
  */
 contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard, IStakingWBTCMorphoSavingsVaultDEURO {
 	using Math for uint256;
 	using SharesMathLib for uint256;
-	using GPv2Order for GPv2Order.Data;
 
 	uint256 internal constant WAD = 1e18;
 	uint256 internal constant ORACLE_SCALE = 1e36;
@@ -72,64 +76,46 @@ contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard
 	ISavingsVault public immutable savingsVault;
 	uint256 internal immutable eurcToDeuroScale; // 10 ** (deuro.decimals() - loanToken.decimals())
 
-	IGPv2Settlement public immutable cowSettlement;
-	address internal immutable cowVaultRelayer;
+	ISwapRouter public immutable uniswapRouter;
 
 	uint256 public targetLtv;
 	uint256 public targetBand;
 	uint256 public swapSlippagePPM = 10_000; // 1%
-	uint32 public orderValidity = 30 minutes;
 
-	uint256 public savingsPrincipal;
-	PendingOrder internal _pendingOrder;
-
-	/// @notice Returns the CoW Swap intent this vault is currently waiting on a solver to fill, if any.
-	function pendingOrder() external view returns (PendingOrder memory) {
-		return _pendingOrder;
-	}
+	uint256 public reconcileThreshold;
+	uint256 public reconcileInterval = 1 hours;
+	uint256 public lastReconciledAt;
 
 	// ---------------------------------------------------------------------------------------
 
-	constructor(
-		address _owner,
-		IERC20 _wbtc,
-		IMorpho _morpho,
-		MarketParams memory _market,
-		IStablecoinBridge _bridge,
-		ISavingsVault _savingsVault,
-		IGPv2Settlement _cowSettlement,
-		uint256 _targetLtv,
-		uint256 _targetBand,
-		string memory _name,
-		string memory _symbol
-	) ERC4626(_wbtc) ERC20(_name, _symbol) Ownable(_owner) {
-		if (_market.collateralToken != address(_wbtc)) revert InvalidMarket();
-		if (_market.loanToken != address(_bridge.eur())) revert InvalidMarket();
-		if (address(_bridge.dEURO()) != _savingsVault.asset()) revert InvalidMarket();
+	constructor(ConstructorParams memory params) ERC4626(params.wbtc) ERC20(params.name, params.symbol) Ownable(params.owner) {
+		if (params.market.collateralToken != address(params.wbtc)) revert InvalidMarket();
+		if (params.market.loanToken != address(params.bridge.eur())) revert InvalidMarket();
+		if (address(params.bridge.dEURO()) != params.savingsVault.asset()) revert InvalidMarket();
 
-		morpho = _morpho;
-		marketId = MarketParamsLib.id(_market);
-		oracle = IOracle(_market.oracle);
-		irm = _market.irm;
-		lltv = _market.lltv;
+		morpho = params.morpho;
+		marketId = MarketParamsLib.id(params.market);
+		oracle = IOracle(params.market.oracle);
+		irm = params.market.irm;
+		lltv = params.market.lltv;
 
-		bridge = _bridge;
-		loanToken = IERC20(_market.loanToken);
-		deuro = _bridge.dEURO();
-		savingsVault = _savingsVault;
-		eurcToDeuroScale = 10 ** (IERC20Metadata(address(deuro)).decimals() - IERC20Metadata(_market.loanToken).decimals());
+		bridge = params.bridge;
+		loanToken = IERC20(params.market.loanToken);
+		deuro = params.bridge.dEURO();
+		savingsVault = params.savingsVault;
+		eurcToDeuroScale = 10 ** (IERC20Metadata(address(deuro)).decimals() - IERC20Metadata(params.market.loanToken).decimals());
 
-		cowSettlement = _cowSettlement;
-		cowVaultRelayer = _cowSettlement.vaultRelayer();
+		uniswapRouter = params.uniswapRouter;
 
-		_setTargetLtv(_targetLtv);
-		_setTargetBand(_targetBand);
+		_setTargetLtv(params.targetLtv);
+		_setTargetBand(params.targetBand);
+		reconcileThreshold = params.reconcileThreshold;
 
-		SafeERC20.forceApprove(_wbtc, address(_morpho), type(uint256).max);
-		SafeERC20.forceApprove(IERC20(_market.loanToken), address(_morpho), type(uint256).max);
-		SafeERC20.forceApprove(IERC20(_market.loanToken), address(_bridge), type(uint256).max);
-		SafeERC20.forceApprove(IERC20(address(deuro)), address(_bridge), type(uint256).max);
-		SafeERC20.forceApprove(IERC20(address(deuro)), address(_savingsVault), type(uint256).max);
+		SafeERC20.forceApprove(params.wbtc, address(params.morpho), type(uint256).max);
+		SafeERC20.forceApprove(IERC20(params.market.loanToken), address(params.morpho), type(uint256).max);
+		SafeERC20.forceApprove(IERC20(params.market.loanToken), address(params.bridge), type(uint256).max);
+		SafeERC20.forceApprove(IERC20(address(deuro)), address(params.bridge), type(uint256).max);
+		SafeERC20.forceApprove(IERC20(address(deuro)), address(params.savingsVault), type(uint256).max);
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -165,9 +151,14 @@ contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard
 		swapSlippagePPM = newSlippagePPM;
 	}
 
-	function setOrderValidity(uint32 newValidity) external onlyOwner {
-		emit OrderValidityChanged(orderValidity, newValidity);
-		orderValidity = newValidity;
+	function setReconcileThreshold(uint256 newThreshold) external onlyOwner {
+		emit ReconcileThresholdChanged(reconcileThreshold, newThreshold);
+		reconcileThreshold = newThreshold;
+	}
+
+	function setReconcileInterval(uint256 newInterval) external onlyOwner {
+		emit ReconcileIntervalChanged(reconcileInterval, newInterval);
+		reconcileInterval = newInterval;
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -197,6 +188,16 @@ contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard
 		return debtInCollateral.mulDiv(WAD, collateral);
 	}
 
+	/// @dev Live EURC value of `savingsVault`'s redeemable dEURO, minus live Morpho debt. Both sides are
+	///      read fresh (no principal/cost-basis bookkeeping): the savings position and the debt are meant
+	///      to track each other 1:1 through `_leverage`/`_deleverage`/`reconcile`, so whatever redeemable
+	///      value has pulled ahead of debt is exactly the interest-rate spread earned so far.
+	function _reconcileDelta() internal view returns (uint256) {
+		uint256 savingsValue = _toEurc(savingsVault.previewRedeem(savingsVault.balanceOf(address(this))));
+		uint256 debt = _debtAssets();
+		return savingsValue > debt ? savingsValue - debt : 0;
+	}
+
 	function _toDeuro(uint256 eurcAmount) internal view returns (uint256) {
 		return eurcAmount * eurcToDeuroScale;
 	}
@@ -207,8 +208,8 @@ contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard
 
 	/// @notice Net asset value in WBTC: collateral + idle WBTC, plus the savings position and any idle
 	///         EURC (both converted through the bridge's 1:1 peg and the Morpho oracle), minus outstanding
-	///         debt. Value that is mid-flight in a pending CoW order still shows up here — either as the
-	///         EURC that hasn't been pulled by the vault relayer yet, or as the WBTC it settles into.
+	///         debt. Value that is mid-flight in a `reconcile` call still shows up here, since the borrow
+	///         and the swap happen atomically in the same transaction.
 	function totalAssets() public view override(ERC4626, IERC4626) returns (uint256) {
 		uint256 collateral = _collateral();
 		uint256 idleWbtc = IERC20(asset()).balanceOf(address(this));
@@ -227,67 +228,42 @@ contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard
 		}
 	}
 
-	/// @notice The action `rebalance()` would take right now, without executing it.
-	function checkRebalance() public view returns (Action) {
-		if (_pendingOrder.orderUid.length > 0) {
-			if (cowSettlement.filledAmount(_pendingOrder.orderUid) > 0 || block.timestamp > _pendingOrder.validTo) {
-				return Action.SETTLE;
-			}
-			return Action.NONE;
-		}
-
-		if (savingsVault.previewRedeem(savingsVault.balanceOf(address(this))) > savingsPrincipal) {
-			return Action.RECONCILE;
-		}
-
-		uint256 ltv = _ltv();
-		if (ltv > targetLtv + targetBand) return Action.DELEVERAGE;
-		if (targetLtv > targetBand && ltv < targetLtv - targetBand) return Action.LEVERAGE;
-		return Action.NONE;
-	}
-
 	// ---------------------------------------------------------------------------------------
-	// Rebalancing
+	// Chainlink Automation — LTV-band leverage/deleverage only. Both directions are fully self-contained
+	// (Morpho + bridge + savingsVault, no external price data), so they're the only actions safe to drive
+	// through checkUpkeep/performUpkeep: an Automation node's checkUpkeep call is a plain simulation with
+	// no HTTP access, so it could never produce a live swap route for `reconcile`.
 
-	/// @notice Permissionlessly executes the single next rebalance action, if any. See
-	///         {IStakingWBTCMorphoSavingsVaultDEURO-rebalance}.
-	function rebalance() external nonReentrant returns (Action) {
-		return _checkRebalance();
+	function checkUpkeep(bytes calldata) external view returns (bool upkeepNeeded, bytes memory performData) {
+		Action action = _pendingLtvAction();
+		return (action != Action.NONE, abi.encode(action));
 	}
 
-	function _checkRebalance() internal returns (Action) {
+	/// @dev `performData` is intentionally ignored beyond existing to satisfy the interface — the action is
+	///      always recomputed live, per the interface's own "never trust performData" guidance.
+	function performUpkeep(bytes calldata) external nonReentrant {
 		morpho.accrueInterest(_marketParams());
 
-		if (_pendingOrder.orderUid.length > 0) {
-			if (cowSettlement.filledAmount(_pendingOrder.orderUid) > 0 || block.timestamp > _pendingOrder.validTo) {
-				_settlePendingOrder();
-				emit Rebalanced(Action.SETTLE);
-				return Action.SETTLE;
-			}
-			return Action.NONE;
-		}
+		Action action = _pendingLtvAction();
+		if (action == Action.NONE) return;
 
-		if (savingsVault.previewRedeem(savingsVault.balanceOf(address(this))) > savingsPrincipal) {
-			_reconcile();
-			emit Rebalanced(Action.RECONCILE);
-			return Action.RECONCILE;
-		}
-
-		uint256 ltv = _ltv();
 		uint256 collateral = _collateral();
 		uint256 debt = _debtAssets();
 		uint256 targetDebt = collateral.mulDiv(oracle.price(), ORACLE_SCALE).mulDiv(targetLtv, WAD);
 
-		if (ltv > targetLtv + targetBand && debt > targetDebt) {
+		if (action == Action.DELEVERAGE) {
 			_deleverage(debt - targetDebt);
-			emit Rebalanced(Action.DELEVERAGE);
-			return Action.DELEVERAGE;
-		} else if (targetLtv > targetBand && ltv < targetLtv - targetBand && targetDebt > debt) {
+		} else {
 			_leverage(targetDebt - debt);
-			emit Rebalanced(Action.LEVERAGE);
-			return Action.LEVERAGE;
 		}
 
+		emit Rebalanced(action);
+	}
+
+	function _pendingLtvAction() internal view returns (Action) {
+		uint256 ltv = _ltv();
+		if (ltv > targetLtv + targetBand) return Action.DELEVERAGE;
+		if (targetLtv > targetBand && ltv < targetLtv - targetBand) return Action.LEVERAGE;
 		return Action.NONE;
 	}
 
@@ -300,25 +276,19 @@ contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard
 		bridge.mint(amount);
 		uint256 deuroAmount = IERC20(address(deuro)).balanceOf(address(this));
 		savingsVault.deposit(deuroAmount, address(this));
-		savingsPrincipal += deuroAmount;
 
 		emit Levered(amount, deuroAmount);
 	}
 
-	/// @dev Unwinds up to `amount` EURC of debt by redeeming the equivalent dEURO principal out of
-	///      `savingsVault`, bridging it back to EURC, and repaying Morpho. Never redeems more principal
-	///      than was tracked as invested, and never repays more than is actually owed.
+	/// @dev Unwinds up to `amount` EURC of debt by redeeming the equivalent dEURO out of `savingsVault`,
+	///      bridging it back to EURC, and repaying Morpho. Caps both legs by what's actually
+	///      available/owed, since `amount` is only a target.
 	function _deleverage(uint256 amount) internal {
-		uint256 principal = savingsPrincipal;
-		uint256 deuroNeeded = Math.min(_toDeuro(amount), principal);
-		if (deuroNeeded == 0) return;
-
+		uint256 deuroNeeded = _toDeuro(amount);
 		uint256 shares = Math.min(savingsVault.previewWithdraw(deuroNeeded), savingsVault.balanceOf(address(this)));
 		if (shares == 0) return;
 
 		uint256 redeemed = savingsVault.redeem(shares, address(this), address(this));
-		savingsPrincipal = principal > redeemed ? principal - redeemed : 0;
-
 		bridge.burnAndSend(address(this), redeemed);
 
 		uint256 eurcBalance = loanToken.balanceOf(address(this));
@@ -329,94 +299,55 @@ contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard
 		emit Delevered(repayAmount, redeemed);
 	}
 
-	/// @dev Claims savings interest accrued above `savingsPrincipal`, bridges it back to EURC, and places a
-	///      CoW Swap intent selling that EURC for WBTC. The proceeds are supplied as collateral once the
-	///      order settles, see {_settlePendingOrder}.
-	function _reconcile() internal {
-		uint256 shares = savingsVault.balanceOf(address(this));
-		uint256 redeemable = savingsVault.previewRedeem(shares);
-		if (redeemable <= savingsPrincipal) return;
+	// ---------------------------------------------------------------------------------------
+	// Reconcile — realizes the savings/debt interest spread. Kept outside the Automation interface (see
+	// contract-level @dev) since it needs a live swap route no on-chain simulation can produce.
 
-		uint256 surplus = redeemable - savingsPrincipal;
-		uint256 sharesToRedeem = Math.min(savingsVault.previewWithdraw(surplus), shares);
-		uint256 claimed = savingsVault.redeem(sharesToRedeem, address(this), address(this));
-
-		bridge.burnAndSend(address(this), claimed);
-
-		uint256 eurcAmount = loanToken.balanceOf(address(this));
-		emit InterestClaimed(claimed, eurcAmount);
-		if (eurcAmount == 0) return;
-
-		uint256 minWbtcOut = eurcAmount.mulDiv(ORACLE_SCALE, oracle.price()).mulDiv(PPM - swapSlippagePPM, PPM);
-		_swap(address(loanToken), asset(), eurcAmount, minWbtcOut);
-	}
-
-	/// @dev Presigns a fill-or-kill CoW Swap sell order via GPv2Settlement.setPreSignature. The order is
-	///      not executed atomically — a solver fills it (or not) over the following blocks — so
-	///      {_settlePendingOrder} is what actually acts on the result.
-	function _swap(address sellToken, address buyToken, uint256 sellAmount, uint256 minBuyAmount) internal {
-		if (_pendingOrder.orderUid.length > 0) revert OrderPending(_pendingOrder.orderUid);
-
-		uint32 validTo = uint32(block.timestamp) + orderValidity;
-		GPv2Order.Data memory order = GPv2Order.Data({
-			sellToken: IERC20(sellToken),
-			buyToken: IERC20(buyToken),
-			receiver: address(this),
-			sellAmount: sellAmount,
-			buyAmount: minBuyAmount,
-			validTo: validTo,
-			appData: bytes32(0),
-			feeAmount: 0,
-			kind: GPv2Order.KIND_SELL,
-			partiallyFillable: false,
-			sellTokenBalance: GPv2Order.BALANCE_ERC20,
-			buyTokenBalance: GPv2Order.BALANCE_ERC20
-		});
-
-		bytes32 digest = order.hash(cowSettlement.domainSeparator());
-		bytes memory orderUid = new bytes(GPv2Order.UID_LENGTH);
-		GPv2Order.packOrderUidParams(orderUid, digest, address(this), validTo);
-
-		SafeERC20.forceApprove(IERC20(sellToken), cowVaultRelayer, sellAmount);
-		cowSettlement.setPreSignature(orderUid, true);
-
-		_pendingOrder = PendingOrder({
-			orderUid: orderUid,
-			sellToken: sellToken,
-			buyToken: buyToken,
-			sellAmount: sellAmount,
-			buyAmount: minBuyAmount,
-			validTo: validTo
-		});
-
-		emit OrderPlaced(orderUid, sellToken, buyToken, sellAmount, minBuyAmount, validTo);
-	}
-
-	/// @dev Settles a filled order (supplying the proceeds as collateral) or cancels an expired,
-	///      unfilled one, freeing `pendingOrder` either way. `received` is a snapshot of this contract's
-	///      full `buyToken` balance rather than a precise per-order delta, which is exact as long as no
-	///      unrelated buyToken balance is left lingering between orders — true here since WBTC is always
-	///      either idle-then-supplied or freshly received from a settled order.
-	function _settlePendingOrder() internal {
-		PendingOrder memory order = _pendingOrder;
-		if (order.orderUid.length == 0) return;
-
-		SafeERC20.forceApprove(IERC20(order.sellToken), cowVaultRelayer, 0);
-
-		if (cowSettlement.filledAmount(order.orderUid) > 0) {
-			delete _pendingOrder;
-
-			uint256 received = IERC20(order.buyToken).balanceOf(address(this));
-			if (order.buyToken == asset() && received > 0) {
-				morpho.supplyCollateral(_marketParams(), received, address(this), '');
-			}
-			emit OrderSettled(order.orderUid, received);
-		} else {
-			cowSettlement.setPreSignature(order.orderUid, false);
-			cowSettlement.invalidateOrder(order.orderUid);
-			delete _pendingOrder;
-			emit OrderExpired(order.orderUid);
+	function reconcile(bytes calldata path) external nonReentrant {
+		if (path.length < 43 || _firstToken(path) != address(loanToken) || _lastToken(path) != asset()) {
+			revert InvalidSwapPath();
 		}
+
+		morpho.accrueInterest(_marketParams());
+
+		uint256 delta = _reconcileDelta();
+		if (delta < reconcileThreshold) revert ReconcileNotDue(delta, reconcileThreshold, 0);
+
+		uint256 validAt = lastReconciledAt + reconcileInterval;
+		if (block.timestamp < validAt) revert ReconcileNotDue(delta, reconcileThreshold, validAt);
+
+		lastReconciledAt = block.timestamp;
+
+		morpho.borrow(_marketParams(), delta, 0, address(this), address(this));
+
+		uint256 minWbtcOut = delta.mulDiv(ORACLE_SCALE, oracle.price()).mulDiv(PPM - swapSlippagePPM, PPM);
+
+		SafeERC20.forceApprove(loanToken, address(uniswapRouter), delta);
+		// amountOut >= minWbtcOut is already enforced by the router itself (it reverts otherwise).
+		uint256 bought = uniswapRouter.exactInput(
+			ISwapRouter.ExactInputParams({
+				path: path,
+				recipient: address(this),
+				deadline: block.timestamp,
+				amountIn: delta,
+				amountOutMinimum: minWbtcOut
+			})
+		);
+		SafeERC20.forceApprove(loanToken, address(uniswapRouter), 0);
+
+		morpho.supplyCollateral(_marketParams(), bought, address(this), '');
+
+		emit Reconciled(delta, bought);
+	}
+
+	/// @dev Extracts the first 20 bytes (leading token) of a Uniswap V3 encoded path.
+	function _firstToken(bytes calldata path) internal pure returns (address) {
+		return address(bytes20(path[:20]));
+	}
+
+	/// @dev Extracts the last 20 bytes (trailing token) of a Uniswap V3 encoded path.
+	function _lastToken(bytes calldata path) internal pure returns (address) {
+		return address(bytes20(path[path.length - 20:]));
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -431,7 +362,7 @@ contract StakingWBTCMorphoSavingsVaultDEURO is ERC4626, Ownable, ReentrancyGuard
 
 	/// @dev Withdraws `assets` of WBTC straight out of the Morpho collateral position. Morpho's own health
 	///      check reverts if that would push the remaining position above `lltv`, so a withdrawal that
-	///      needs the vault to deleverage first must wait for `rebalance()` to bring the LTV down, rather
+	///      needs the vault to deleverage first must wait for `performUpkeep` to bring the LTV down, rather
 	///      than being served as a partial fill.
 	function _withdraw(address caller, address receiver, address owner, uint256 assets, uint256 shares) internal override {
 		if (caller != owner) _spendAllowance(owner, caller, shares);

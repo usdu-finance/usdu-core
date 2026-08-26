@@ -1,54 +1,59 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.20;
 
+import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IERC4626} from '@openzeppelin/contracts/interfaces/IERC4626.sol';
+import {ISwapRouter} from '@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol';
 
-import {IMorpho, Id} from '../morpho/helpers/IMorpho.sol';
-import {IGPv2Settlement} from '../cow/helpers/IGPv2Settlement.sol';
+import {IMorpho, MarketParams, Id} from '../morpho/helpers/IMorpho.sol';
+import {AutomationCompatibleInterface} from '../automation/helpers/AutomationCompatibleInterface.sol';
 import {IStablecoinBridge} from './helpers/IStablecoinBridge.sol';
 import {ISavingsVault} from './helpers/ISavingsVault.sol';
 
-interface IStakingWBTCMorphoSavingsVaultDEURO is IERC4626 {
-	/// @notice The action _checkRebalance would take (or just took) the next time it runs. Only one action
-	///         is taken per rebalance() call; a keeper should keep calling until this reads NONE.
+interface IStakingWBTCMorphoSavingsVaultDEURO is IERC4626, AutomationCompatibleInterface {
+	/// @notice The rebalance action checkUpkeep/performUpkeep would take (or just took).
 	enum Action {
 		NONE,
-		SETTLE, // a placed CoW order is filled or expired and needs to be settled/cancelled
-		RECONCILE, // savings position has redeemable interest above savingsPrincipal, worth claiming
-		LEVERAGE, // LTV is below targetLtv - targetBand
-		DELEVERAGE // LTV is above targetLtv + targetBand
+		LEVERAGE, // LTV is below targetLtv - targetBand: borrow more EURC, deposit it into savingsVault
+		DELEVERAGE // LTV is above targetLtv + targetBand: redeem from savingsVault, repay Morpho debt
 	}
 
-	/// @notice A CoW Swap intent this vault has presigned and is waiting for a solver to fill.
-	struct PendingOrder {
-		bytes orderUid;
-		address sellToken;
-		address buyToken;
-		uint256 sellAmount;
-		uint256 buyAmount;
-		uint32 validTo;
+	/// @notice Grouped into a single struct (rather than ~12 constructor params) to sidestep a "stack too
+	///         deep" limitation of the Solidity compiler without the (project-wide) `viaIR` build mode.
+	struct ConstructorParams {
+		address owner;
+		IERC20 wbtc;
+		IMorpho morpho;
+		MarketParams market;
+		IStablecoinBridge bridge;
+		ISavingsVault savingsVault;
+		ISwapRouter uniswapRouter;
+		uint256 targetLtv;
+		uint256 targetBand;
+		uint256 reconcileThreshold;
+		string name;
+		string symbol;
 	}
 
 	// ---------------------------------------------------------------------------------------
 
 	event Levered(uint256 borrowedEurc, uint256 investedDeuro);
 	event Delevered(uint256 repaidEurc, uint256 withdrawnDeuro);
-	event InterestClaimed(uint256 claimedDeuro, uint256 claimedEurc);
-	event OrderPlaced(bytes orderUid, address sellToken, address buyToken, uint256 sellAmount, uint256 minBuyAmount, uint32 validTo);
-	event OrderSettled(bytes orderUid, uint256 received);
-	event OrderExpired(bytes orderUid);
+	event Reconciled(uint256 borrowedEurc, uint256 boughtWbtc);
 	event Rebalanced(Action action);
 	event TargetLtvChanged(uint256 previousLtv, uint256 newLtv);
 	event TargetBandChanged(uint256 previousBand, uint256 newBand);
 	event SwapSlippageChanged(uint256 previousSlippagePPM, uint256 newSlippagePPM);
-	event OrderValidityChanged(uint32 previousValidity, uint32 newValidity);
+	event ReconcileThresholdChanged(uint256 previousThreshold, uint256 newThreshold);
+	event ReconcileIntervalChanged(uint256 previousInterval, uint256 newInterval);
 
 	// ---------------------------------------------------------------------------------------
 
 	error LtvOutOfBounds(uint256 targetLtv, uint256 targetBand, uint256 lltv);
 	error SlippageTooHigh(uint256 requested, uint256 cap);
-	error OrderPending(bytes orderUid);
 	error InvalidMarket();
+	error ReconcileNotDue(uint256 delta, uint256 threshold, uint256 validAt);
+	error InvalidSwapPath();
 
 	// ---------------------------------------------------------------------------------------
 
@@ -60,7 +65,10 @@ interface IStakingWBTCMorphoSavingsVaultDEURO is IERC4626 {
 
 	function savingsVault() external view returns (ISavingsVault);
 
-	function cowSettlement() external view returns (IGPv2Settlement);
+	/// @notice The fixed Uniswap V3 router `reconcile` swaps EURC for WBTC through. Only the swap path is
+	///         a caller-supplied input; the router address itself is immutable, and amountIn/
+	///         amountOutMinimum/recipient/deadline are all computed on-chain, never caller-supplied.
+	function uniswapRouter() external view returns (ISwapRouter);
 
 	function targetLtv() external view returns (uint256);
 
@@ -68,21 +76,25 @@ interface IStakingWBTCMorphoSavingsVaultDEURO is IERC4626 {
 
 	function swapSlippagePPM() external view returns (uint256);
 
-	function orderValidity() external view returns (uint32);
+	/// @notice Minimum EURC-denominated delta (savingsVault value above Morpho debt) worth reconciling.
+	function reconcileThreshold() external view returns (uint256);
 
-	/// @notice The dEURO principal this vault has deposited into `savingsVault`, tracked so that
-	///         redeemable value above this line can be recognized as claimable interest.
-	function savingsPrincipal() external view returns (uint256);
+	/// @notice Minimum time between two `reconcile` calls.
+	function reconcileInterval() external view returns (uint256);
 
-	function pendingOrder() external view returns (PendingOrder memory);
+	function lastReconciledAt() external view returns (uint256);
 
-	/// @notice Returns the action _checkRebalance would take right now, without executing it.
-	function checkRebalance() external view returns (Action);
-
-	/// @notice Permissionlessly executes the single next rebalance action (settle/reconcile/leverage/
-	///         deleverage), if any. Callable by anyone, e.g. a keeper bot; a no-op (Action.NONE) when the
-	///         position is already within targetLtv +/- targetBand and there is nothing to settle or claim.
-	function rebalance() external returns (Action);
+	/// @notice Borrows the current EURC surplus (savingsVault value above Morpho debt) and swaps it for
+	///         WBTC through `uniswapRouter`, supplying the proceeds as additional collateral. Leaves the
+	///         existing savingsVault position untouched so it keeps compounding. Permissionless, but
+	///         gated by `reconcileThreshold`/`reconcileInterval` so it can't be spammed on dust.
+	/// @param path Uniswap V3 encoded swap path passed to `uniswapRouter.exactInput` (tightly packed
+	///        `token, fee, token, fee, ..., token`), from EURC to WBTC (the first token must be the loan
+	///        token, the last token must be `asset()`). This is the only caller-supplied input — amountIn
+	///        is exactly the surplus, and amountOutMinimum is enforced on-chain from the Morpho oracle
+	///        price and `swapSlippagePPM`, so a bad path just reverts or fails that check; it can never
+	///        drain more than the surplus being reconciled.
+	function reconcile(bytes calldata path) external;
 
 	function setTargetLtv(uint256 newTargetLtv) external;
 
@@ -90,5 +102,7 @@ interface IStakingWBTCMorphoSavingsVaultDEURO is IERC4626 {
 
 	function setSwapSlippagePPM(uint256 newSlippagePPM) external;
 
-	function setOrderValidity(uint32 newValidity) external;
+	function setReconcileThreshold(uint256 newThreshold) external;
+
+	function setReconcileInterval(uint256 newInterval) external;
 }
