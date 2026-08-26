@@ -1,4 +1,4 @@
-import { arbitrum, base, citrea, mainnet } from 'viem/chains';
+import { arbitrum, base, mainnet, optimism, polygon } from 'viem/chains';
 import { Address, Chain } from 'viem';
 
 // network and chains
@@ -6,7 +6,8 @@ export const ChainMain = { mainnet } as const;
 export const ChainSide = {
 	arbitrum,
 	base,
-	citrea,
+	optimism,
+	polygon,
 } as const;
 
 // supported chains
@@ -17,7 +18,8 @@ export const SupportedChainsMap: { [K in ChainId]: SupportedChain | Chain } = {
 	[mainnet.id]: mainnet,
 	[arbitrum.id]: arbitrum,
 	[base.id]: base,
-	[citrea.id]: citrea,
+	[optimism.id]: optimism,
+	[polygon.id]: polygon,
 } as const;
 
 export const SupportedChainIds = Object.values(SupportedChains).map((chain) => chain.id);
@@ -25,7 +27,7 @@ export const SupportedChainIds = Object.values(SupportedChains).map((chain) => c
 // chain ids
 export type ChainIdMain = typeof mainnet.id;
 
-export type ChainIdSide = typeof arbitrum.id | typeof base.id | typeof citrea.id;
+export type ChainIdSide = typeof arbitrum.id | typeof base.id | typeof optimism.id | typeof polygon.id;
 
 export type ChainId = ChainIdMain | ChainIdSide;
 
@@ -79,10 +81,22 @@ export type ChainAddressBase = {
 	merklDistributor: Address;
 };
 
-export type ChainAddressCitrea = {
+export type ChainAddressOptimism = {
 	// identifier
-	chainId: typeof citrea.id;
+	chainId: typeof optimism.id;
 	chainSelector: string;
+
+	// external protocols
+	merklDistributor: Address;
+};
+
+export type ChainAddressPolygon = {
+	// identifier
+	chainId: typeof polygon.id;
+	chainSelector: string;
+
+	// external protocols
+	merklDistributor: Address;
 };
 
 // ChainAddressMap aggregation
@@ -90,5 +104,6 @@ export type ChainAddressMap = {
 	[mainnet.id]: ChainAddressMainnet;
 	[arbitrum.id]: ChainAddressArbitrum;
 	[base.id]: ChainAddressBase;
-	[citrea.id]: ChainAddressCitrea;
+	[optimism.id]: ChainAddressOptimism;
+	[polygon.id]: ChainAddressPolygon;
 };

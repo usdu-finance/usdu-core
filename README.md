@@ -26,7 +26,8 @@ contracts/
 **Supported Networks:**
 
 -   **Mainnet** (primary): Full protocol deployment with all contracts
--   **L2s** (in discussion): Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Sonic
+-   **L2s**: Arbitrum, Base, Optimism, Polygon
+-   **L2s** (in discussion): Avalanche, Gnosis, Sonic
 
 > See `exports/address.types.ts` for complete chain configurations and `exports/address.config.ts` for deployed addresses.
 

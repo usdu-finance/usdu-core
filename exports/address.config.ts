@@ -1,4 +1,4 @@
-import { arbitrum, base, citrea, mainnet } from 'viem/chains';
+import { arbitrum, base, mainnet, optimism, polygon } from 'viem/chains';
 import { ChainAddressMap } from './address.types';
 
 export const ADDRESS: ChainAddressMap = {
@@ -24,7 +24,7 @@ export const ADDRESS: ChainAddressMap = {
 		curveStableSwapNG_USDCUSDU_gauge: '0xbB6eDb6E10fC89F1032F3c4DdB2e73d1BeDa423f',
 
 		// external protocols
-		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base
+		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base, optimism, polygon
 		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 
 		// swap modules and utils
@@ -40,7 +40,7 @@ export const ADDRESS: ChainAddressMap = {
 		chainSelector: '4949039107694359620',
 
 		// external protocols
-		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base
+		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base, optimism, polygon
 		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 	},
 	[base.id]: {
@@ -49,12 +49,25 @@ export const ADDRESS: ChainAddressMap = {
 		chainSelector: '15971525489660198786',
 
 		// external protocols
-		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base
+		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base, optimism, polygon
 		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 	},
-	[citrea.id]: {
+	[optimism.id]: {
 		// identifier
-		chainId: 4114,
-		chainSelector: '', // not yet listed in the Chainlink CCIP directory
+		chainId: 10,
+		chainSelector: '3734403246176062136',
+
+		// external protocols
+		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base, optimism, polygon
+		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
+	},
+	[polygon.id]: {
+		// identifier
+		chainId: 137,
+		chainSelector: '4051577828743386545',
+
+		// external protocols
+		// https://docs.merkl.xyz/integrate-merkl/smart-contract-addresses — same address on mainnet, arbitrum, base, optimism, polygon
+		merklDistributor: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 	},
 } as const;

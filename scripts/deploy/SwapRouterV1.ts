@@ -10,7 +10,7 @@
  *   npx tsx scripts/deploy/SwapRouterV1.ts [network] [true]
  *
  *   (no args)   Dry run against mainnet: predict the address, simulate, print the plan.
- *   network     One of: mainnet, arbitrum, base, citrea (defaults to mainnet if omitted).
+ *   network     One of: mainnet, arbitrum, base, optimism, polygon (defaults to mainnet if omitted).
  *   true        Must be the last arg. Also broadcasts the deployment transaction.
  *
  * Examples:
@@ -21,7 +21,7 @@
  *
  * Env:
  *   PRIVATE_KEY      - deployer's private key (required)
- *   ALCHEMY_RPC_KEY  - Alchemy API key for the target network's RPC endpoint (required, except on citrea)
+ *   ALCHEMY_RPC_KEY  - Alchemy API key for the target network's RPC endpoint (required)
  *
  * Args (constructor args for SwapRouterV1 — resolved below, not passed via CLI):
  *   stable  - address of the IStablecoin whose registered modules this router forwards calls to.

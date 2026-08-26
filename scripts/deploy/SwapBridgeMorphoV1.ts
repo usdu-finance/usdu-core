@@ -14,7 +14,7 @@
  *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts <vault> [network] [true]
  *
  *   vault       Required. Address of the ERC4626 vault (e.g. a Morpho Vault V2) to deploy against.
- *   network     One of: mainnet, arbitrum, base, citrea (defaults to mainnet if omitted).
+ *   network     One of: mainnet, arbitrum, base, optimism, polygon (defaults to mainnet if omitted).
  *   true        Must be the last arg. Also broadcasts the deployment transaction.
  *
  * Examples:
@@ -25,7 +25,7 @@
  *
  * Env:
  *   PRIVATE_KEY      - deployer's private key (required)
- *   ALCHEMY_RPC_KEY  - Alchemy API key for the target network's RPC endpoint (required, except on citrea)
+ *   ALCHEMY_RPC_KEY  - Alchemy API key for the target network's RPC endpoint (required)
  *
  * Args (constructor args for SwapBridgeMorphoV1):
  *   stable        - address of the IStablecoin this bridge mints/burns. Taken from USDU_STABLE_BY_NETWORK

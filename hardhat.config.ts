@@ -78,9 +78,17 @@ const config: HardhatUserConfig = {
 			accounts: [wallet.privateKey],
 			timeout: 50_000,
 		},
-		citrea: {
-			url: `https://rpc.mainnet.citrea.xyz`,
-			chainId: 4114,
+		optimism: {
+			url: `https://opt-mainnet.g.alchemy.com/v2/${alchemy}`,
+			chainId: 10,
+			gas: 'auto',
+			gasPrice: 'auto',
+			accounts: [wallet.privateKey],
+			timeout: 50_000,
+		},
+		polygon: {
+			url: `https://polygon-mainnet.g.alchemy.com/v2/${alchemy}`,
+			chainId: 137,
 			gas: 'auto',
 			gasPrice: 'auto',
 			accounts: [wallet.privateKey],
@@ -95,7 +103,10 @@ const config: HardhatUserConfig = {
 			arbitrum: etherscan,
 			// @ts-ignore
 			base: etherscan,
-			citrea: 'API key',
+			// @ts-ignore
+			optimism: etherscan,
+			// @ts-ignore
+			polygon: etherscan,
 		},
 		customChains: [
 			{
@@ -123,11 +134,19 @@ const config: HardhatUserConfig = {
 				},
 			},
 			{
-				network: 'citrea',
-				chainId: 4114,
+				network: 'optimism',
+				chainId: 10,
 				urls: {
-					apiURL: 'https://explorer.mainnet.citrea.xyz/api',
-					browserURL: 'https://explorer.mainnet.citrea.xyz',
+					apiURL: 'https://api.etherscan.io/v2/api?chainid=10',
+					browserURL: 'https://optimistic.etherscan.io',
+				},
+			},
+			{
+				network: 'polygon',
+				chainId: 137,
+				urls: {
+					apiURL: 'https://api.etherscan.io/v2/api?chainid=137',
+					browserURL: 'https://polygonscan.com',
 				},
 			},
 		],

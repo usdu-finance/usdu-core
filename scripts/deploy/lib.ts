@@ -8,18 +8,19 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { ethers } from 'ethers';
-import { arbitrum, base, citrea, mainnet } from 'viem/chains';
+import { arbitrum, base, mainnet, optimism, polygon } from 'viem/chains';
 
 // ---------------------------------------------------------------------------------------
 
-export const CHAINS = { mainnet, arbitrum, base, citrea } as const;
+export const CHAINS = { mainnet, arbitrum, base, optimism, polygon } as const;
 export type Network = keyof typeof CHAINS;
 
 const RPC_URLS: { [K in Network]: (alchemyKey: string) => string } = {
 	mainnet: (key) => `https://eth-mainnet.g.alchemy.com/v2/${key}`,
 	arbitrum: (key) => `https://arb-mainnet.g.alchemy.com/v2/${key}`,
 	base: (key) => `https://base-mainnet.g.alchemy.com/v2/${key}`,
-	citrea: () => `https://rpc.mainnet.citrea.xyz`,
+	optimism: (key) => `https://opt-mainnet.g.alchemy.com/v2/${key}`,
+	polygon: (key) => `https://polygon-mainnet.g.alchemy.com/v2/${key}`,
 };
 
 // Canonical "Nick's method" deterministic-deployment-proxy — permissionless, same address on almost every
@@ -39,6 +40,8 @@ export const MERKL_DISTRIBUTOR_BY_NETWORK: Partial<Record<Network, string>> = {
 	mainnet: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 	arbitrum: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 	base: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
+	optimism: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
+	polygon: '0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae',
 };
 
 // ---------------------------------------------------------------------------------------
@@ -127,8 +130,8 @@ export async function getERC4626Details(provider: ethers.JsonRpcProvider, addres
 
 export function getProvider(network: Network): ethers.JsonRpcProvider {
 	const alchemyKey = process.env.ALCHEMY_RPC_KEY;
-	if (!alchemyKey && network !== 'citrea') throw new Error('Missing ALCHEMY_RPC_KEY in .env');
-	return new ethers.JsonRpcProvider(RPC_URLS[network](alchemyKey ?? ''));
+	if (!alchemyKey) throw new Error('Missing ALCHEMY_RPC_KEY in .env');
+	return new ethers.JsonRpcProvider(RPC_URLS[network](alchemyKey));
 }
 
 export function getWallet(provider: ethers.JsonRpcProvider): ethers.Wallet {
