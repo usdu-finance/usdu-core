@@ -5,7 +5,7 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
 
-import {IStablecoinModifier, Stablecoin} from '../stablecoin/IStablecoinModifier.sol';
+import {IStablecoinModifier, IStablecoinMetadata} from '../stablecoin/IStablecoinModifier.sol';
 
 import {IMerklDistributor} from './helpers/IMerklDistributor.sol';
 
@@ -32,7 +32,7 @@ abstract contract MerklRewardsV1 is IStablecoinModifier, ReentrancyGuard {
 	///      combines this with another IStablecoinModifier-derived abstract (e.g. ModuleRevenueV1) would
 	///      otherwise hit Solidity's "base constructor arguments given twice" diamond-inheritance error, so the
 	///      concrete contract supplies IStablecoinModifier(_stable) itself instead.
-	constructor(Stablecoin /* _stable */, IMerklDistributor _distributor) {
+	constructor(IStablecoinMetadata /* _stable */, IMerklDistributor _distributor) {
 		distributor = _distributor;
 	}
 

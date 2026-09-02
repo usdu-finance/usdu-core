@@ -6,7 +6,7 @@ import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-import {RewardDistributionV1, Stablecoin} from '../reward/RewardDistributionV1.sol';
+import {RewardDistributionV1, IStablecoinMetadata} from '../reward/RewardDistributionV1.sol';
 
 import {IMetaMorphoV1_1} from './helpers/IMetaMorphoV1_1.sol';
 
@@ -17,7 +17,7 @@ import {IMetaMorphoV1_1} from './helpers/IMetaMorphoV1_1.sol';
  */
 contract MorphoAdapterV1_2 is RewardDistributionV1 {
 	using Math for uint256;
-	using SafeERC20 for Stablecoin;
+	using SafeERC20 for IStablecoinMetadata;
 	using SafeERC20 for IMetaMorphoV1_1;
 
 	IMetaMorphoV1_1 public immutable core;
@@ -38,7 +38,7 @@ contract MorphoAdapterV1_2 is RewardDistributionV1 {
 	// ---------------------------------------------------------------------------------------
 
 	constructor(
-		Stablecoin _stable,
+		IStablecoinMetadata _stable,
 		IMetaMorphoV1_1 _core,
 		address[5] memory _receivers,
 		uint32[5] memory _weights

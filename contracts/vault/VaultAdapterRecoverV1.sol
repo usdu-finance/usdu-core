@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.20;
 
-import {Stablecoin, IERC20, IERC4626, VaultAdapterV1, SafeERC20} from './VaultAdapterV1.sol';
+import {IStablecoinMetadata, IERC20, IERC4626, VaultAdapterV1, SafeERC20} from './VaultAdapterV1.sol';
 
 /**
  * @title VaultAdapterRecoverV1
@@ -13,7 +13,7 @@ contract VaultAdapterRecoverV1 is VaultAdapterV1 {
 	using SafeERC20 for IERC20;
 
 	constructor(
-		Stablecoin _stable,
+		IStablecoinMetadata _stable,
 		IERC4626 _vault,
 		address[5] memory _receivers,
 		uint32[5] memory _weights

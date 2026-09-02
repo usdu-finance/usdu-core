@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.20;
 
-import {IStablecoinModifier, Stablecoin} from '../stablecoin/IStablecoinModifier.sol';
+import {IStablecoinModifier, IStablecoinMetadata} from '../stablecoin/IStablecoinModifier.sol';
 
 import {IModuleExpenseV1} from './IModuleExpenseV1.sol';
 
@@ -25,7 +25,7 @@ abstract contract ModuleExpenseV1 is IStablecoinModifier, IModuleExpenseV1 {
 
 	// ---------------------------------------------------------------------------------------
 
-	constructor(Stablecoin _stable, uint256 _fundsCap) IStablecoinModifier(_stable) {
+	constructor(IStablecoinMetadata _stable, uint256 _fundsCap) IStablecoinModifier(_stable) {
 		fundsCap = _fundsCap;
 	}
 

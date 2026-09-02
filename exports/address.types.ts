@@ -37,14 +37,18 @@ export type ChainAddressMainnet = {
 	chainId: typeof mainnet.id;
 	chainSelector: string;
 
+	// #############
 	// curator / DAO
+	// #############
 	curator: Address;
 	aragonDao: Address;
 	aragonMultiSig: Address;
 	aragonDelayedAction: Address;
 	aragonVetoMultiSig: Address;
 
-	// deployer and stable
+	// ###############
+	// Stablecoin USDU
+	// ###############
 	usduDeployer: Address;
 	usduStable: Address;
 
@@ -56,11 +60,35 @@ export type ChainAddressMainnet = {
 	merklDistributor: Address;
 
 	// swap modules and utils
-	swapRouterV1: Address;
-	swapBridgeMorphoV1_steakUSDC_vault: Address;
-	swapBridgeMorphoV1_steakUSDC_module: Address;
-	swapBridgeMorphoV1_steakUSDT_vault: Address;
-	swapBridgeMorphoV1_steakUSDT_module: Address;
+	usduSwapRouterV1: Address;
+	usduSwapBridgeMorphoV1_steakUSDC_vault: Address;
+	usduSwapBridgeMorphoV1_steakUSDC_module: Address;
+	usduSwapBridgeMorphoV1_steakUSDT_vault: Address;
+	usduSwapBridgeMorphoV1_steakUSDT_module: Address;
+
+	// ###############
+	// Stablecoin EURU
+	// ###############
+	euruDeployer: Address;
+	euruStable: Address;
+
+	// swap modules and utils
+	euruSwapRouterV1: Address;
+	euruSwapBridgeMorphoV1_steakEURC_vault: Address;
+	euruSwapBridgeMorphoV1_steakEURC_module: Address;
+	euruSwapBridgeMorphoV1_EURCdEURO_vault: Address;
+	euruSwapBridgeMorphoV1_EURCdEURO_module: Address;
+
+	// ###############
+	// Stablecoin CHFU
+	// ###############
+	chfuDeployer: Address;
+	chfuStable: Address;
+
+	// swap modules and utils
+	chfuSwapRouterV1: Address;
+	chfuSwapBridgeMorphoV1_ZCHF_vault: Address;
+	chfuSwapBridgeMorphoV1_ZCHF_module: Address;
 };
 
 export type ChainAddressArbitrum = {

@@ -3,11 +3,11 @@ pragma solidity ^0.8.20;
 
 import {Context} from '@openzeppelin/contracts/utils/Context.sol';
 
-import {Stablecoin} from './Stablecoin.sol';
+import {IStablecoinMetadata} from './IStablecoinMetadata.sol';
 import {ErrorsLib} from './libraries/ErrorsLib.sol';
 
 abstract contract IStablecoinModifier is Context {
-	Stablecoin public immutable stable;
+	IStablecoinMetadata public immutable stable;
 
 	modifier onlyCurator() {
 		stable.verifyCurator(_msgSender());
@@ -46,7 +46,7 @@ abstract contract IStablecoinModifier is Context {
 		_;
 	}
 
-	constructor(Stablecoin _stable) {
+	constructor(IStablecoinMetadata _stable) {
 		stable = _stable;
 	}
 }

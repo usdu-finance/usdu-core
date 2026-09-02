@@ -7,7 +7,7 @@ import {Context} from '@openzeppelin/contracts/utils/Context.sol';
 import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-import {RewardDistributionV1, Stablecoin} from '../reward/RewardDistributionV1.sol';
+import {RewardDistributionV1, IStablecoinMetadata} from '../reward/RewardDistributionV1.sol';
 
 import {ICurveStableSwapNG} from './helpers/ICurveStableSwapNG.sol';
 
@@ -28,7 +28,7 @@ import {ICurveStableSwapNG} from './helpers/ICurveStableSwapNG.sol';
 contract CurveAdapterV1_2 is RewardDistributionV1 {
 	using Math for uint256;
 	using SafeERC20 for IERC20Metadata;
-	using SafeERC20 for Stablecoin;
+	using SafeERC20 for IStablecoinMetadata;
 
 	/// @notice The Curve StableSwapNG pool this adapter interfaces with
 	ICurveStableSwapNG public immutable pool;
@@ -135,7 +135,7 @@ contract CurveAdapterV1_2 is RewardDistributionV1 {
 		uint256 _idxC,
 		address[5] memory _receivers,
 		uint32[5] memory _weights
-	) RewardDistributionV1(Stablecoin(_pool.coins(_idxS)), _receivers, _weights) {
+	) RewardDistributionV1(IStablecoinMetadata(_pool.coins(_idxS)), _receivers, _weights) {
 		pool = _pool;
 
 		require(_idxS < 2, 'idxS out of bounds for max 2 tokens');

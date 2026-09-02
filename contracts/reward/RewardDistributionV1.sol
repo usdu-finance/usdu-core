@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
 
-import {IStablecoinModifier, Stablecoin} from '../stablecoin/IStablecoinModifier.sol';
+import {IStablecoinModifier, IStablecoinMetadata} from '../stablecoin/IStablecoinModifier.sol';
 import {ErrorsLib} from '../stablecoin/libraries/ErrorsLib.sol';
 
 abstract contract RewardDistributionV1 is IStablecoinModifier {
@@ -26,7 +26,7 @@ abstract contract RewardDistributionV1 is IStablecoinModifier {
 
 	// ---------------------------------------------------------------------------------------
 
-	constructor(Stablecoin _stable, address[5] memory _receivers, uint32[5] memory _weights) IStablecoinModifier(_stable) {
+	constructor(IStablecoinMetadata _stable, address[5] memory _receivers, uint32[5] memory _weights) IStablecoinModifier(_stable) {
 		_setDistribution(_receivers, _weights);
 	}
 

@@ -7,7 +7,7 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IERC4626} from '@openzeppelin/contracts/interfaces/IERC4626.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-import {RewardDistributionV1, Stablecoin} from '../reward/RewardDistributionV1.sol';
+import {RewardDistributionV1, IStablecoinMetadata} from '../reward/RewardDistributionV1.sol';
 
 /**
  * @title VaultAdapterV1
@@ -18,7 +18,7 @@ contract VaultAdapterV1 is RewardDistributionV1 {
 	using Math for uint256;
 	using SafeERC20 for IERC20;
 	using SafeERC20 for IERC4626;
-	using SafeERC20 for Stablecoin;
+	using SafeERC20 for IStablecoinMetadata;
 
 	IERC4626 public immutable vault;
 
@@ -38,7 +38,7 @@ contract VaultAdapterV1 is RewardDistributionV1 {
 	// ---------------------------------------------------------------------------------------
 
 	constructor(
-		Stablecoin _stable,
+		IStablecoinMetadata _stable,
 		IERC4626 _vault,
 		address[5] memory _receivers,
 		uint32[5] memory _weights

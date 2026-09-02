@@ -7,7 +7,7 @@ import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IER
 import {IERC4626} from '@openzeppelin/contracts/interfaces/IERC4626.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-import {ModuleRevenueV1, Stablecoin} from '../../module/ModuleRevenueV1.sol';
+import {ModuleRevenueV1, IStablecoinMetadata} from '../../module/ModuleRevenueV1.sol';
 import {MerklRewardsV1} from '../../merkl/MerklRewardsV1.sol';
 import {IMerklDistributor} from '../../merkl/helpers/IMerklDistributor.sol';
 
@@ -54,7 +54,7 @@ contract SwapBridgeMorphoV1 is ModuleRevenueV1, MerklRewardsV1, ISwapBridgeMorph
 	// ---------------------------------------------------------------------------------------
 
 	constructor(
-		Stablecoin _stable,
+		IStablecoinMetadata _stable,
 		IMerklDistributor _distributor,
 		IERC4626 _vault,
 		uint256 _mintCap,

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
 
-import {IStablecoinModifier, Stablecoin} from '../stablecoin/IStablecoinModifier.sol';
+import {IStablecoinModifier, IStablecoinMetadata} from '../stablecoin/IStablecoinModifier.sol';
 
 import {IModuleRevenueV1} from './IModuleRevenueV1.sol';
 
@@ -35,7 +35,7 @@ abstract contract ModuleRevenueV1 is IStablecoinModifier, IModuleRevenueV1, Reen
 
 	// ---------------------------------------------------------------------------------------
 
-	constructor(Stablecoin _stable, uint256 _mintCap) IStablecoinModifier(_stable) {
+	constructor(IStablecoinMetadata _stable, uint256 _mintCap) IStablecoinModifier(_stable) {
 		mintCap = _mintCap;
 	}
 
