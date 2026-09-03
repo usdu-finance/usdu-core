@@ -73,8 +73,8 @@ export type ChainAddressMainnet = {
 	euruSwapRouterV1: Address;
 	euruSwapBridgeMorphoV1_steakEURC_vault: Address;
 	euruSwapBridgeMorphoV1_steakEURC_module: Address;
-	euruSwapBridgeMorphoV1_EURCdEURO_vault: Address;
-	euruSwapBridgeMorphoV1_EURCdEURO_module: Address;
+	// euruSwapBridgeMorphoV1_EURCdEURO_vault: Address;
+	// euruSwapBridgeMorphoV1_EURCdEURO_module: Address;
 
 	// ###############
 	// Stablecoin CHFU
