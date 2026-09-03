@@ -6,30 +6,31 @@
  *
  * Deployed via CREATE2 through the canonical deterministic-deployment-proxy, with a fixed salt. Since the
  * CREATE2 address also depends on the init code (bytecode + constructor args), the same salt is safe to reuse
- * across genuinely different deployments (a different vault, ...) — each combination of args still predicts
- * its own distinct address; only an exact re-run (same network, same vault) resolves to the same,
- * already-deployed address.
+ * across genuinely different deployments (a different coin, a different vault, ...) — each combination of args
+ * still predicts its own distinct address; only an exact re-run (same network, same coin, same vault) resolves
+ * to the same, already-deployed address.
  *
  * Usage:
- *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts <vault> [network] [true]
+ *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts <coin> <vault> [network] [true]
  *
+ *   coin        Required. Which stablecoin this bridge mints/burns: usdu | euru.
  *   vault       Required. Address of the ERC4626 vault (e.g. a Morpho Vault V2) to deploy against.
  *   network     One of: mainnet, arbitrum, base, optimism, polygon (defaults to mainnet if omitted).
  *   true        Must be the last arg. Also broadcasts the deployment transaction.
  *
  * Examples:
- *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts 0xVault...                 # dry run, mainnet
- *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts 0xVault... arbitrum        # dry run, arbitrum
- *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts 0xVault... true            # execute, mainnet
- *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts 0xVault... arbitrum true   # execute, arbitrum
+ *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts usdu 0xVault...                 # dry run, mainnet
+ *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts euru 0xVault... arbitrum        # dry run, arbitrum
+ *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts usdu 0xVault... true            # execute, mainnet
+ *   npx tsx scripts/deploy/SwapBridgeMorphoV1.ts euru 0xVault... arbitrum true   # execute, arbitrum
  *
  * Env:
  *   PRIVATE_KEY      - deployer's private key (required)
  *   ALCHEMY_RPC_KEY  - Alchemy API key for the target network's RPC endpoint (required)
  *
  * Args (constructor args for SwapBridgeMorphoV1):
- *   stable        - address of the IStablecoin this bridge mints/burns. Taken from USDU_STABLE_BY_NETWORK
- *                   in lib.ts for the selected network.
+ *   stable        - address of the IStablecoin this bridge mints/burns. Taken from STABLE_BY_NETWORK
+ *                   in lib.ts for the selected coin + network.
  *   distributor   - Merkl's Distributor contract, for claiming incentives accrued on the vault position.
  *                   Taken from MERKL_DISTRIBUTOR_BY_NETWORK in lib.ts for the selected network.
  *   vault         - the ERC4626 vault the coin is deposited into. Passed as the CLI <vault> arg above.
@@ -45,7 +46,7 @@ import { ethers } from 'ethers';
 import {
 	CHAINS,
 	MERKL_DISTRIBUTOR_BY_NETWORK,
-	USDU_STABLE_BY_NETWORK,
+	STABLE_BY_NETWORK,
 	deployViaCreate2,
 	getERC20Details,
 	getERC4626Details,
@@ -53,7 +54,7 @@ import {
 	getWallet,
 	loadArtifact,
 	predictCreate2Address,
-	resolveArgsWithAddress,
+	resolveArgsWithCoinAndAddress,
 } from './lib';
 
 // ---------------------------------------------------------------------------------------
@@ -75,11 +76,11 @@ const CONFIG = {
 // ---------------------------------------------------------------------------------------
 
 async function main() {
-	const { address: vaultAddress, network, execute } = resolveArgsWithAddress(process.argv, 'vault');
+	const { coin, address: vaultAddress, network, execute } = resolveArgsWithCoinAndAddress(process.argv, 'vault');
 	const chain = CHAINS[network];
 
-	const stable = USDU_STABLE_BY_NETWORK[network];
-	if (!stable) throw new Error(`No usduStable configured for network "${network}". Set USDU_STABLE_BY_NETWORK in lib.ts.`);
+	const stable = STABLE_BY_NETWORK[coin][network];
+	if (!stable) throw new Error(`No ${coin} stable configured for network "${network}". Set STABLE_BY_NETWORK.${coin} in lib.ts.`);
 
 	const distributor = MERKL_DISTRIBUTOR_BY_NETWORK[network];
 	if (!distributor)
@@ -89,6 +90,7 @@ async function main() {
 	const wallet = getWallet(provider);
 
 	console.log('### SwapBridgeMorphoV1 deployment ###');
+	console.log('Coin:           ', coin);
 	console.log('Network:        ', network, `(chainId ${chain.id})`);
 	console.log('Deployer:       ', wallet.address);
 	console.log('Deployer ETH:   ', ethers.formatEther(await provider.getBalance(wallet.address)));

@@ -2,22 +2,23 @@
  * Deploys SwapRouterV1 — the stateless, non-custodial entrypoint that forwards swapIn/swapOut calls to
  * whichever ISwapBridgeV1 module is registered on the configured stablecoin.
  *
- * Deployed via CREATE2 through the canonical deterministic-deployment-proxy, with a fixed salt: re-running
- * this script for the same network always predicts — and, if already deployed, resolves to — the same
- * address, rather than a fresh nonce-based one.
+ * Deployed via CREATE2 through the canonical deterministic-deployment-proxy, with a fixed salt. Since the
+ * CREATE2 address also depends on the init code (bytecode + constructor args), the same salt is safe to reuse
+ * across different coins — each coin's stable address predicts its own distinct SwapRouterV1 address; only an
+ * exact re-run (same network, same coin) resolves to the same, already-deployed address.
  *
  * Usage:
- *   npx tsx scripts/deploy/SwapRouterV1.ts [network] [true]
+ *   npx tsx scripts/deploy/SwapRouterV1.ts <coin> [network] [true]
  *
- *   (no args)   Dry run against mainnet: predict the address, simulate, print the plan.
+ *   coin        Required. Which stablecoin's router to deploy: usdu | euru.
  *   network     One of: mainnet, arbitrum, base, optimism, polygon (defaults to mainnet if omitted).
  *   true        Must be the last arg. Also broadcasts the deployment transaction.
  *
  * Examples:
- *   npx tsx scripts/deploy/SwapRouterV1.ts                 # dry run, mainnet
- *   npx tsx scripts/deploy/SwapRouterV1.ts arbitrum         # dry run, arbitrum
- *   npx tsx scripts/deploy/SwapRouterV1.ts true             # execute, mainnet
- *   npx tsx scripts/deploy/SwapRouterV1.ts arbitrum true    # execute, arbitrum
+ *   npx tsx scripts/deploy/SwapRouterV1.ts usdu                 # dry run, mainnet
+ *   npx tsx scripts/deploy/SwapRouterV1.ts euru arbitrum         # dry run, arbitrum
+ *   npx tsx scripts/deploy/SwapRouterV1.ts usdu true             # execute, mainnet
+ *   npx tsx scripts/deploy/SwapRouterV1.ts euru arbitrum true    # execute, arbitrum
  *
  * Env:
  *   PRIVATE_KEY      - deployer's private key (required)
@@ -25,7 +26,7 @@
  *
  * Args (constructor args for SwapRouterV1 — resolved below, not passed via CLI):
  *   stable  - address of the IStablecoin whose registered modules this router forwards calls to.
- *             Taken from USDU_STABLE_BY_NETWORK in lib.ts for the selected network.
+ *             Taken from STABLE_BY_NETWORK in lib.ts for the selected coin + network.
  */
 
 import 'dotenv/config';
@@ -33,13 +34,13 @@ import { ethers } from 'ethers';
 
 import {
 	CHAINS,
-	USDU_STABLE_BY_NETWORK,
+	STABLE_BY_NETWORK,
 	deployViaCreate2,
 	getProvider,
 	getWallet,
 	loadArtifact,
 	predictCreate2Address,
-	resolveArgs,
+	resolveArgsWithCoin,
 } from './lib';
 
 // ---------------------------------------------------------------------------------------
@@ -52,11 +53,11 @@ const SALT = ethers.id('usdu-finance/SwapRouterV1');
 // ---------------------------------------------------------------------------------------
 
 async function main() {
-	const { network, execute } = resolveArgs(process.argv);
+	const { coin, network, execute } = resolveArgsWithCoin(process.argv);
 	const chain = CHAINS[network];
 
-	const stable = USDU_STABLE_BY_NETWORK[network];
-	if (!stable) throw new Error(`No usduStable configured for network "${network}". Set USDU_STABLE_BY_NETWORK in lib.ts.`);
+	const stable = STABLE_BY_NETWORK[coin][network];
+	if (!stable) throw new Error(`No ${coin} stable configured for network "${network}". Set STABLE_BY_NETWORK.${coin} in lib.ts.`);
 
 	const provider = getProvider(network);
 	const wallet = getWallet(provider);
@@ -66,6 +67,7 @@ async function main() {
 	const predictedAddress = predictCreate2Address(bytecode, encodedArgs, SALT);
 
 	console.log('### SwapRouterV1 deployment ###');
+	console.log('Coin:           ', coin);
 	console.log('Network:        ', network, `(chainId ${chain.id})`);
 	console.log('Deployer:       ', wallet.address);
 	console.log('Deployer ETH:   ', ethers.formatEther(await provider.getBalance(wallet.address)));

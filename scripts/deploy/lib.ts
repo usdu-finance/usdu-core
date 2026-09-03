@@ -27,11 +27,27 @@ const RPC_URLS: { [K in Network]: (alchemyKey: string) => string } = {
 // EVM chain. Accepts calldata = 32-byte salt ++ init code, and CREATE2-deploys it.
 export const CREATE2_FACTORY = '0x4e59b44847b379578588920cA78FbF26c0B4956C';
 
+// Stablecoins these deploy scripts know how to target — add a key here (and to STABLE_BY_NETWORK below) once
+// a new coin's deployer has been broadcast on at least one network.
+export const COINS = ['usdu', 'euru'] as const;
+export type Coin = (typeof COINS)[number];
+
 // Static, protocol-wide addresses — hardcoded rather than pulled from exports/address.config.ts, since that
 // module's per-network type doesn't guarantee every field exists on every chain and these deploy scripts
 // should show exactly what address they're about to wire in, at a glance, without an extra lookup.
-export const USDU_STABLE_BY_NETWORK: Partial<Record<Network, string>> = {
-	mainnet: '0xdde3ec717f220fc6a29d6a4be73f91da5b718e55',
+export const STABLE_BY_NETWORK: Record<Coin, Partial<Record<Network, string>>> = {
+	usdu: {
+		mainnet: '0xdde3ec717f220fc6a29d6a4be73f91da5b718e55',
+	},
+	euru: {
+		// not deployed yet — filled in once EuruDeployer.ts has broadcast on a network
+	},
+};
+
+// The DAO address that becomes `curator` on a freshly deployed stablecoin — same across coins, hardcoded for
+// the same reason as STABLE_BY_NETWORK above.
+export const DAO_BY_NETWORK: Partial<Record<Network, string>> = {
+	mainnet: '0x9fe66037c44236c87D9Ac8345F489b4413fDFf06',
 };
 
 // Merkl's Distributor contract — deployed at the same address on the vast majority of EVM chains, mainnet,
@@ -46,6 +62,20 @@ export const MERKL_DISTRIBUTOR_BY_NETWORK: Partial<Record<Network, string>> = {
 
 // ---------------------------------------------------------------------------------------
 
+function parseNetwork(requested: string | undefined): Network {
+	if (requested && !(requested in CHAINS)) {
+		throw new Error(`Unknown network "${requested}" — expected one of: ${Object.keys(CHAINS).join(', ')}`);
+	}
+	return (requested ?? 'mainnet') as Network;
+}
+
+function parseCoin(requested: string | undefined): Coin {
+	if (!requested || !(COINS as readonly string[]).includes(requested)) {
+		throw new Error(`Missing or invalid coin as the first argument — expected one of: ${COINS.join(', ')}`);
+	}
+	return requested as Coin;
+}
+
 /**
  * Parses `npx tsx <script> [network] [true]` — network defaults to mainnet if omitted, `true` (only
  * meaningful as the last arg) switches from dry-run to broadcasting.
@@ -55,19 +85,48 @@ export function resolveArgs(argv: string[]): { network: Network; execute: boolea
 	const execute = args[args.length - 1] === 'true';
 	const networkArgs = execute ? args.slice(0, -1) : args;
 
-	const requested = networkArgs[0];
-	if (requested && !(requested in CHAINS)) {
-		throw new Error(`Unknown network "${requested}" — expected one of: ${Object.keys(CHAINS).join(', ')}`);
-	}
-
-	return { network: (requested ?? 'mainnet') as Network, execute };
+	return { network: parseNetwork(networkArgs[0]), execute };
 }
 
 /**
- * Parses `npx tsx <script> <address> [network] [true]` — like resolveArgs, but with a required leading
- * address positional (e.g. a vault to introspect before deploying against it).
+ * Parses `npx tsx <script> <coin> [network] [true]` — like resolveArgs, but with a required leading coin
+ * positional (which stablecoin, e.g. usdu | euru, this deployment targets).
  */
-export function resolveArgsWithAddress(argv: string[], addressLabel: string): { address: string; network: Network; execute: boolean } {
+export function resolveArgsWithCoin(argv: string[]): { coin: Coin; network: Network; execute: boolean } {
+	const args = argv.slice(2);
+	const execute = args[args.length - 1] === 'true';
+	const rest = execute ? args.slice(0, -1) : args;
+
+	return { coin: parseCoin(rest[0]), network: parseNetwork(rest[1]), execute };
+}
+
+/**
+ * Parses `npx tsx <script> <coin> <address> [network] [true]` — like resolveArgsWithCoin, but with a required
+ * second address positional (e.g. a vault to introspect before deploying against it).
+ */
+export function resolveArgsWithCoinAndAddress(
+	argv: string[],
+	addressLabel: string
+): { coin: Coin; address: string; network: Network; execute: boolean } {
+	const args = argv.slice(2);
+	const execute = args[args.length - 1] === 'true';
+	const rest = execute ? args.slice(0, -1) : args;
+
+	const coin = parseCoin(rest[0]);
+
+	const address = rest[1];
+	if (!address || !ethers.isAddress(address)) {
+		throw new Error(`Missing or invalid ${addressLabel} address as the second argument.`);
+	}
+
+	return { coin, address, network: parseNetwork(rest[2]), execute };
+}
+
+/**
+ * Parses `npx tsx <script> <address> [true]` — no network positional: for one-shot deployer contracts (e.g.
+ * EuruDeployer) that are mainnet-only for now, so there's nothing to select between.
+ */
+export function resolveMainnetArgsWithAddress(argv: string[], addressLabel: string): { address: string; execute: boolean } {
 	const args = argv.slice(2);
 	const execute = args[args.length - 1] === 'true';
 	const rest = execute ? args.slice(0, -1) : args;
@@ -77,12 +136,7 @@ export function resolveArgsWithAddress(argv: string[], addressLabel: string): { 
 		throw new Error(`Missing or invalid ${addressLabel} address as the first argument.`);
 	}
 
-	const requested = rest[1];
-	if (requested && !(requested in CHAINS)) {
-		throw new Error(`Unknown network "${requested}" — expected one of: ${Object.keys(CHAINS).join(', ')}`);
-	}
-
-	return { address, network: (requested ?? 'mainnet') as Network, execute };
+	return { address, execute };
 }
 
 const ERC20_ABI = ['function name() view returns (string)', 'function symbol() view returns (string)', 'function decimals() view returns (uint8)'];
