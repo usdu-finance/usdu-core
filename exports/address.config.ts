@@ -43,6 +43,17 @@ export const ADDRESS: ChainAddressMap = {
 		euruSwapBridgeMorphoV1_steakEURC_vault: '0xbeef003E31546C7210687f1A7b40d096BE83ec58',
 		euruSwapBridgeMorphoV1_steakEURC_module: '0x83F263eF950586Ce3C35D58930f0d2001fe79c50',
 
+		// ###############
+		// Stablecoin CHFU
+		// ###############
+		chfuDeployer: '0x9748bA8223f64B5Fee7d0cA2a5D27FEDbcF933be',
+		chfuStable: '0x4B43F48A665E2F15C4913a76CF67509672396146',
+
+		// swap modules and utils
+		chfuSwapRouterV1: '0xE8c10BEbde8C6a5611297184be2520fd47bdc34A',
+		chfuSwapBridgeMorphoV1_ZCHF_vault: '0xE5F130253fF137f9917C0107659A4c5262abf6b0',
+		chfuSwapBridgeMorphoV1_ZCHF_module: '0x19ff1079d9CdA8E415af4C95cFEb5A2f47Da1d15',
+
 		// ##################
 		// external protocols
 		// ##################

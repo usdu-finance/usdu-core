@@ -29,7 +29,7 @@ export const CREATE2_FACTORY = '0x4e59b44847b379578588920cA78FbF26c0B4956C';
 
 // Stablecoins these deploy scripts know how to target — add a key here (and to STABLE_BY_NETWORK below) once
 // a new coin's deployer has been broadcast on at least one network.
-export const COINS = ['usdu', 'euru'] as const;
+export const COINS = ['usdu', 'euru', 'chfu'] as const;
 export type Coin = (typeof COINS)[number];
 
 // Static, protocol-wide addresses — hardcoded rather than pulled from exports/address.config.ts, since that
@@ -40,7 +40,10 @@ export const STABLE_BY_NETWORK: Record<Coin, Partial<Record<Network, string>>> =
 		mainnet: '0xdde3ec717f220fc6a29d6a4be73f91da5b718e55',
 	},
 	euru: {
-		// not deployed yet — filled in once EuruDeployer.ts has broadcast on a network
+		mainnet: '0x6e30d56cb23068dE5A084D4A4f2A909823424F06',
+	},
+	chfu: {
+		mainnet: '0x4B43F48A665E2F15C4913a76CF67509672396146',
 	},
 };
 
