@@ -56,9 +56,6 @@ export type ChainAddressMainnet = {
 	curveStableSwapNG_USDCUSDU: Address;
 	curveStableSwapNG_USDCUSDU_gauge: Address;
 
-	// external protocols
-	merklDistributor: Address;
-
 	// swap modules and utils
 	usduSwapRouterV1: Address;
 	usduSwapBridgeMorphoV1_steakUSDC_vault: Address;
@@ -89,6 +86,11 @@ export type ChainAddressMainnet = {
 	chfuSwapRouterV1: Address;
 	chfuSwapBridgeMorphoV1_ZCHF_vault: Address;
 	chfuSwapBridgeMorphoV1_ZCHF_module: Address;
+
+	// ##################
+	// external protocols
+	// ##################
+	merklDistributor: Address;
 };
 
 export type ChainAddressArbitrum = {
