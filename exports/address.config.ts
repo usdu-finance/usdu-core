@@ -24,6 +24,10 @@ export const ADDRESS: ChainAddressMap = {
 		// https://www.curve.finance/dex/ethereum/pools/factory-stable-ng-596
 		curveStableSwapNG_USDCUSDU: '0x6C5Ff8DCe52BE77b4eCE6B51996018f0C1713bA9',
 		curveStableSwapNG_USDCUSDU_gauge: '0xbB6eDb6E10fC89F1032F3c4DdB2e73d1BeDa423f',
+		// https://etherscan.io/token/0x114acebbe474fa0c0dcde6617d867d1a14d20ada
+		curveTwocryptoNG_USDUEURU: '0x114acEbbE474fA0c0DcDe6617D867d1A14d20ADA',
+		// https://etherscan.io/address/0x08f288c19cc8123280987acc85e2cc55c08b1e65
+		curveTwocryptoNG_USDUCHFU: '0x08F288C19cC8123280987ACc85e2cc55c08B1E65',
 
 		// swap modules and utils
 		usduSwapRouterV1: '0x2A51F412B4E3fc3a43605B8EB9917facF5b5a08E',
