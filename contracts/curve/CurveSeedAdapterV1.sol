@@ -18,10 +18,13 @@ import {ITwocrypto} from './helpers/ITwocrypto.sol';
  * @dev Per pool: seed() mints USDU plus a surplus-padded amount of the other leg (sized off the
  *      pool's live price_scale()), deposits a balanced pair, burns whatever of the surplus wasn't
  *      needed, and tracks both legs' minted debt. removeLiquidity() unwinds LP tokens back into this
- *      contract (not straight to the curator), so repayDebt() can then burn down outstanding debt
- *      from whatever balance is sitting here, forwarding any excess to the curator. No ongoing
- *      revenue/reconcile machinery beyond that — this is a seeding + unwind tool, not an adapter that
- *      stays deployed against trading fees.
+ *      contract and immediately settles `pool`'s debt from the withdrawal in the same call (via
+ *      _repay), draining this contract's usdu/other balance back to zero before any other pool's
+ *      operation can run — that's what keeps a shared token balance from ever being attributable to
+ *      the wrong pool. repayDebt() is the same settlement, exposed standalone for any balance that
+ *      lands here outside of removeLiquidity (e.g. a direct top-up). No ongoing revenue/reconcile
+ *      machinery beyond that — this is a seeding + unwind tool, not an adapter that stays deployed
+ *      against trading fees.
  */
 contract CurveSeedAdapterV1 is Context {
 	using SafeERC20 for IStablecoinMetadata;
@@ -48,7 +51,7 @@ contract CurveSeedAdapterV1 is Context {
 	/// @notice Emitted after the curator unwinds (part of) `pool`'s LP position into this contract.
 	event RemoveLiquidity(ITwocrypto indexed pool, uint256 shares, uint256[2] withdrawn);
 
-	/// @notice Emitted after outstanding debt for `pool` is repaid from this contract's balance.
+	/// @notice Emitted whenever `pool`'s debt is repaid, whether via removeLiquidity or repayDebt.
 	event RepayDebt(ITwocrypto indexed pool, uint256 repaidUsdu, uint256 repaidOther);
 
 	// ---------------------------------------------------------------------------------------
@@ -93,7 +96,12 @@ contract CurveSeedAdapterV1 is Context {
 	 * @param minShares Minimum LP tokens accepted (slippage protection).
 	 * @return shares LP tokens received, held by this adapter.
 	 */
-	function seed(ITwocrypto pool, uint256 amountUsdu, uint256 surplusBps, uint256 minShares) external onlyCurator returns (uint256 shares) {
+	function seed(
+		ITwocrypto pool,
+		uint256 amountUsdu,
+		uint256 surplusBps,
+		uint256 minShares
+	) external onlyCurator returns (uint256 shares) {
 		if (amountUsdu == 0) revert ZeroAmount();
 		IStablecoinMetadata other = _verifyPool(pool);
 
@@ -123,29 +131,48 @@ contract CurveSeedAdapterV1 is Context {
 	}
 
 	/**
-	 * @notice Curator-only unwind of (part of) `pool`'s LP position held by this adapter, received back
-	 *         into this contract (not the curator) so repayDebt() can settle debt from it.
+	 * @notice Curator-only unwind of (part of) `pool`'s LP position, immediately settling `pool`'s
+	 *         debt from the proceeds in the same call (see repayDebt/_repay).
+	 * @dev Repaying here rather than leaving it for a later, separate call is what keeps this
+	 *      contract's usdu/other balance from ever sitting around between transactions where a
+	 *      different pool's operation could pick it up — see _repay.
 	 * @param pool The pool to withdraw from.
 	 * @param shares LP tokens to redeem.
 	 * @param minAmounts Minimum amounts expected for [coin(0), coin(1)] (slippage protection).
 	 * @return withdrawn Amounts received [coin(0)Amount, coin(1)Amount].
 	 */
-	function removeLiquidity(ITwocrypto pool, uint256 shares, uint256[2] calldata minAmounts) external onlyCurator returns (uint256[2] memory withdrawn) {
-		_verifyPool(pool);
+	function removeLiquidity(
+		ITwocrypto pool,
+		uint256 shares,
+		uint256[2] calldata minAmounts
+	) external onlyCurator returns (uint256[2] memory withdrawn) {
+		IStablecoinMetadata other = _verifyPool(pool);
 		withdrawn = pool.remove_liquidity(shares, minAmounts, address(this));
 		emit RemoveLiquidity(pool, shares, withdrawn);
+
+		_settle(pool, other);
 	}
 
 	/**
-	 * @notice Burns down `pool`'s outstanding debt from whatever USDU/other-leg balance this contract
-	 *         currently holds (e.g. after removeLiquidity), forwarding any balance beyond the debt to
-	 *         the curator. Permissionless, since it only ever spends this contract's own balance.
+	 * @notice Curator-only: burns down `pool`'s outstanding debt from this contract's current
+	 *         usdu/other-leg balance, forwarding any balance beyond the debt to the curator. Exists
+	 *         standalone (on top of removeLiquidity's own settlement) for balance that lands here
+	 *         outside of a withdrawal, e.g. a direct top-up.
 	 * @param pool The pool whose debt to repay.
 	 * @return repaidUsdu Amount of USDU debt repaid.
 	 * @return repaidOther Amount of other-leg debt repaid.
 	 */
-	function repayDebt(ITwocrypto pool) external returns (uint256 repaidUsdu, uint256 repaidOther) {
+	function repayDebt(ITwocrypto pool) external onlyCurator returns (uint256 repaidUsdu, uint256 repaidOther) {
 		IStablecoinMetadata other = _verifyPool(pool);
+		return _settle(pool, other);
+	}
+
+	/// @dev Runs both legs of debt settlement for `pool` against this contract's current balance and
+	///      emits RepayDebt. Curator-only via its two callers (removeLiquidity, repayDebt) — the
+	///      balance spent here is shared across every pool this adapter manages, so an untrusted
+	///      caller picking an arbitrary `pool` could otherwise sweep balance meant for a different
+	///      pool's debt.
+	function _settle(ITwocrypto pool, IStablecoinMetadata other) internal returns (uint256 repaidUsdu, uint256 repaidOther) {
 		Debt storage debt = debts[pool];
 
 		repaidUsdu = _repay(usdu, debt.usdu);

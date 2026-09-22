@@ -6,7 +6,7 @@ import { mainnet } from 'viem/chains';
 
 import { ADDRESS } from '../../exports/address.config';
 import { CurveSeedAdapterV1, ITwocrypto, ITwocryptoFactory, Stablecoin } from '../../typechain';
-import { evm_increaseTime, resetFork } from '../helper';
+import { evm_increaseTime, resetFork, setERC20Balance } from '../helper';
 
 const addr = ADDRESS[mainnet.id];
 
@@ -166,24 +166,65 @@ describe('CurveSeedAdapterV1', function () {
 			expect(debt.other).to.equal(expectedOther);
 		});
 
-		it('lets the curator unwind part of the LP position into the adapter, then repays debt from it', async function () {
+		it('unwinds part of the LP position and settles debt from it atomically, in the same call', async function () {
 			const adapterLP = await euruPool.balanceOf(adapter);
 			const shares = adapterLP / 4n;
 
 			const debtBefore = await adapter.debts(euruPool);
 
-			await adapter.connect(curator).removeLiquidity(euruPool, shares, [0n, 0n]);
-
-			expect(await euruPool.balanceOf(adapter)).to.equal(adapterLP - shares);
-			const usduHeld = await usdu.balanceOf(adapter);
-			const euruHeld = await euru.balanceOf(adapter);
-			expect(usduHeld).to.be.gt(0n);
-			expect(euruHeld).to.be.gt(0n);
-
 			const curatorUsduBefore = await usdu.balanceOf(curator);
 			const curatorEuruBefore = await euru.balanceOf(curator);
 
-			const tx = await adapter.repayDebt(euruPool);
+			const tx = await adapter.connect(curator).removeLiquidity(euruPool, shares, [0n, 0n]);
+			const receipt = await tx.wait();
+
+			const logs = receipt!.logs.map((log) => {
+				try {
+					return adapter.interface.parseLog(log);
+				} catch {
+					return null;
+				}
+			});
+			const removeEvent = logs.find((e) => e?.name === 'RemoveLiquidity')!;
+			const repayEvent = logs.find((e) => e?.name === 'RepayDebt')!;
+
+			expect(await euruPool.balanceOf(adapter)).to.equal(adapterLP - shares);
+
+			// removed a proportional (1/4) slice of a balanced pool, well under outstanding debt, so the
+			// whole withdrawal is consumed by debt repayment within the same tx — nothing left over for
+			// the curator, and no balance is ever left sitting in the adapter between calls
+			expect(repayEvent.args.repaidUsdu).to.equal(removeEvent.args.withdrawn[0]);
+			expect(repayEvent.args.repaidOther).to.equal(removeEvent.args.withdrawn[1]);
+			expect(await usdu.balanceOf(adapter)).to.equal(0n);
+			expect(await euru.balanceOf(adapter)).to.equal(0n);
+			expect(await usdu.balanceOf(curator)).to.equal(curatorUsduBefore);
+			expect(await euru.balanceOf(curator)).to.equal(curatorEuruBefore);
+
+			const debtAfter = await adapter.debts(euruPool);
+			expect(debtAfter.usdu).to.equal(debtBefore.usdu - removeEvent.args.withdrawn[0]);
+			expect(debtAfter.other).to.equal(debtBefore.other - removeEvent.args.withdrawn[1]);
+		});
+
+		it('rejects removeLiquidity from a non-curator caller', async function () {
+			await expect(adapter.connect(other).removeLiquidity(euruPool, 1n, [0n, 0n])).to.be.revertedWithCustomError(
+				usdu,
+				'NotCuratorRole'
+			);
+		});
+
+		it('rejects repayDebt from a non-curator caller', async function () {
+			await expect(adapter.connect(other).repayDebt(euruPool)).to.be.revertedWithCustomError(usdu, 'NotCuratorRole');
+		});
+
+		it('repayDebt settles a direct top-up that never went through removeLiquidity', async function () {
+			// still ~3/4 of the original debt outstanding at this point (only partially unwound above)
+			const topUp = parseEther('10');
+			await setERC20Balance(addr.euruStable, await adapter.getAddress(), topUp);
+
+			const debtBefore = await adapter.debts(euruPool);
+			expect(debtBefore.other).to.be.gt(topUp); // top-up alone shouldn't fully cover outstanding debt
+
+			const tx = await adapter.connect(curator).repayDebt(euruPool);
 			const receipt = await tx.wait();
 			const repayEvent = receipt!.logs
 				.map((log) => {
@@ -195,51 +236,16 @@ describe('CurveSeedAdapterV1', function () {
 				})
 				.find((e) => e?.name === 'RepayDebt')!;
 
-			// removed a proportional (1/4) slice of a balanced pool, well under outstanding debt, so the
-			// whole withdrawn balance is consumed by debt repayment — nothing left over for the curator
-			expect(repayEvent.args.repaidUsdu).to.equal(usduHeld);
-			expect(repayEvent.args.repaidOther).to.equal(euruHeld);
-			expect(await usdu.balanceOf(adapter)).to.equal(0n);
+			expect(repayEvent.args.repaidUsdu).to.equal(0n);
+			expect(repayEvent.args.repaidOther).to.equal(topUp);
 			expect(await euru.balanceOf(adapter)).to.equal(0n);
-			expect(await usdu.balanceOf(curator)).to.equal(curatorUsduBefore);
-			expect(await euru.balanceOf(curator)).to.equal(curatorEuruBefore);
 
 			const debtAfter = await adapter.debts(euruPool);
-			expect(debtAfter.usdu).to.equal(debtBefore.usdu - usduHeld);
-			expect(debtAfter.other).to.equal(debtBefore.other - euruHeld);
+			expect(debtAfter.other).to.equal(debtBefore.other - topUp);
 		});
-
-		it('rejects removeLiquidity from a non-curator caller', async function () {
-			await expect(adapter.connect(other).removeLiquidity(euruPool, 1n, [0n, 0n])).to.be.revertedWithCustomError(
-				usdu,
-				'NotCuratorRole'
-			);
-		});
-
-		it('forwards surplus beyond debt to the curator on a full unwind', async function () {
-			const debtBefore = await adapter.debts(euruPool);
-			const adapterLP = await euruPool.balanceOf(adapter);
-
-			await adapter.connect(curator).removeLiquidity(euruPool, adapterLP, [0n, 0n]);
-
-			const usduHeld = await usdu.balanceOf(adapter);
-			const euruHeld = await euru.balanceOf(adapter);
-
-			const curatorUsduBefore = await usdu.balanceOf(curator);
-			const curatorEuruBefore = await euru.balanceOf(curator);
-
-			await adapter.repayDebt(euruPool);
-
-			const debtAfter = await adapter.debts(euruPool);
-			expect(debtAfter.usdu).to.equal(0n);
-			expect(debtAfter.other).to.equal(0n);
-
-			// anything withdrawn beyond the remaining debt (e.g. LP fee growth) went to the curator
-			const expectedSurplusUsdu = usduHeld > debtBefore.usdu ? usduHeld - debtBefore.usdu : 0n;
-			const expectedSurplusEuru = euruHeld > debtBefore.other ? euruHeld - debtBefore.other : 0n;
-			expect(await usdu.balanceOf(curator)).to.equal(curatorUsduBefore + expectedSurplusUsdu);
-			expect(await euru.balanceOf(curator)).to.equal(curatorEuruBefore + expectedSurplusEuru);
-		});
+		// EURU pool still has ~3/4 of its LP and debt outstanding at this point — kept that way
+		// deliberately so 'cross-pool isolation' below can exercise it alongside a freshly-seeded CHFU
+		// pool; the full unwind of what's left happens last, in 'USDU/EURU pool cleanup'.
 	});
 
 	describe('USDU/CHFU pool', function () {
@@ -260,6 +266,62 @@ describe('CurveSeedAdapterV1', function () {
 			const debt = await adapter.debts(chfuPool);
 			expect(debt.usdu).to.equal(amountUsdu);
 			expect(debt.other).to.equal(expectedOther);
+		});
+	});
+
+	describe('cross-pool isolation', function () {
+		// by this point both EURU and CHFU pools have been seeded (in the describe blocks above) and
+		// each still carries outstanding USDU debt — exactly the scenario where a shared token.balanceOf
+		// would previously let settling one pool's debt consume balance meant for the other's.
+		it("doesn't let settling one pool's debt touch balance withdrawn for a different pool", async function () {
+			const chfuDebtBefore = await adapter.debts(chfuPool);
+			expect(chfuDebtBefore.usdu).to.be.gt(0n);
+
+			// unwind (part of) the EURU pool — this settles EURU's own debt atomically within the same
+			// call and must leave the adapter's usdu/chfu balance, and CHFU's tracked debt, untouched
+			const euruAdapterLP = await euruPool.balanceOf(adapter);
+			await adapter.connect(curator).removeLiquidity(euruPool, euruAdapterLP / 2n, [0n, 0n]);
+
+			expect(await usdu.balanceOf(adapter)).to.equal(0n);
+			expect(await chfu.balanceOf(adapter)).to.equal(0n);
+
+			const chfuDebtAfter = await adapter.debts(chfuPool);
+			expect(chfuDebtAfter.usdu).to.equal(chfuDebtBefore.usdu);
+			expect(chfuDebtAfter.other).to.equal(chfuDebtBefore.other);
+		});
+	});
+
+	describe('USDU/EURU pool cleanup', function () {
+		it('forwards surplus beyond debt to the curator on a full unwind', async function () {
+			const debtBefore = await adapter.debts(euruPool);
+			const adapterLP = await euruPool.balanceOf(adapter);
+
+			const curatorUsduBefore = await usdu.balanceOf(curator);
+			const curatorEuruBefore = await euru.balanceOf(curator);
+
+			const tx = await adapter.connect(curator).removeLiquidity(euruPool, adapterLP, [0n, 0n]);
+			const receipt = await tx.wait();
+			const withdrawn = receipt!.logs
+				.map((log) => {
+					try {
+						return adapter.interface.parseLog(log);
+					} catch {
+						return null;
+					}
+				})
+				.find((e) => e?.name === 'RemoveLiquidity')!.args.withdrawn;
+
+			const debtAfter = await adapter.debts(euruPool);
+			expect(debtAfter.usdu).to.equal(0n);
+			expect(debtAfter.other).to.equal(0n);
+			expect(await usdu.balanceOf(adapter)).to.equal(0n);
+			expect(await euru.balanceOf(adapter)).to.equal(0n);
+
+			// anything withdrawn beyond the remaining debt (e.g. LP fee growth) went to the curator
+			const expectedSurplusUsdu = withdrawn[0] > debtBefore.usdu ? withdrawn[0] - debtBefore.usdu : 0n;
+			const expectedSurplusEuru = withdrawn[1] > debtBefore.other ? withdrawn[1] - debtBefore.other : 0n;
+			expect(await usdu.balanceOf(curator)).to.equal(curatorUsduBefore + expectedSurplusUsdu);
+			expect(await euru.balanceOf(curator)).to.equal(curatorEuruBefore + expectedSurplusEuru);
 		});
 	});
 });
