@@ -5,6 +5,16 @@ export const latestBlockNumber = async () => {
 	return await ethers.provider.getBlockNumber();
 };
 
+/**
+ * Re-forks the Hardhat network at `blockNumber`, overriding the global `hardhat.config.ts` pin
+ * for the current test file only (network state resets between test files anyway). Needed when a
+ * test depends on a contract that wasn't deployed yet at the config's default fork block.
+ */
+export const resetFork = async (blockNumber: number): Promise<void> => {
+	const alchemy = process.env.ALCHEMY_RPC_KEY;
+	await helper.reset(`https://eth-mainnet.g.alchemy.com/v2/${alchemy}`, blockNumber);
+};
+
 export const evm_increaseTime = async (seconds: number | bigint) => {
 	await helper.time.increase(seconds);
 	await helper.mine(1);
