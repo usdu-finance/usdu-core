@@ -13,15 +13,17 @@ console.log(NAME);
 // params
 export type DeploymentParams = {
 	usdu: Address;
+	pools: Address[];
 };
 
 export const params: DeploymentParams = {
 	usdu: ADDRESS[mainnet.id].usduStable,
+	pools: [ADDRESS[mainnet.id].curveTwocryptoNG_USDUEURU, ADDRESS[mainnet.id].curveTwocryptoNG_USDUCHFU],
 };
 
-export type ConstructorArgs = [Address];
+export type ConstructorArgs = [Address, Address[]];
 
-export const args: ConstructorArgs = [params.usdu];
+export const args: ConstructorArgs = [params.usdu, params.pools];
 
 console.log('Imported Params:');
 console.log(params);

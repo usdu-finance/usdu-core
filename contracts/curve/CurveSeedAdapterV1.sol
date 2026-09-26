@@ -11,10 +11,11 @@ import {ITwocrypto} from './helpers/ITwocrypto.sol';
 /**
  * @title CurveSeedAdapterV1
  * @author @samclassix <samclassix@proton.me>
- * @notice Curator-only seeding utility for any Curve TwoCrypto-NG pool pairing USDU (always coin(0))
- *         with another protocol stablecoin (e.g. EURU or CHFU, coin(1)). A single instance manages
- *         every such pool, keyed by pool address, so it doubles as the module registered on USDU and
- *         on every paired stablecoin.
+ * @notice Curator-only seeding utility for a fixed, deploy-time allowlist of Curve TwoCrypto-NG pools
+ *         pairing USDU (always coin(0)) with another protocol stablecoin (e.g. EURU or CHFU, coin(1)).
+ *         A single instance manages every allowlisted pool, keyed by pool address, so it doubles as
+ *         the module registered on USDU and on every paired stablecoin. Seeding a pool not on the
+ *         allowlist requires deploying a new instance with that pool included.
  * @dev Per pool: seed() mints USDU plus a surplus-padded amount of the other leg (sized off the
  *      pool's live price_scale()), deposits a balanced pair, burns whatever of the surplus wasn't
  *      needed, and tracks both legs' minted debt. removeLiquidity() unwinds LP tokens back into this
@@ -40,6 +41,9 @@ contract CurveSeedAdapterV1 is Context {
 	/// @notice Thrown when `amountUsdu` is zero.
 	error ZeroAmount();
 
+	/// @notice Thrown when `pool` is not on the deploy-time allowlist.
+	error PoolNotAllowed(ITwocrypto pool);
+
 	/// @notice Thrown when `pool`'s coin(0) is not USDU.
 	error InvalidPool(ITwocrypto pool);
 
@@ -59,6 +63,10 @@ contract CurveSeedAdapterV1 is Context {
 	/// @notice USDU, present as coin(0) in every pool this adapter seeds.
 	IStablecoinMetadata public immutable usdu;
 
+	/// @notice Deploy-time allowlist of pools this instance is permitted to operate on. Checked before
+	///         any external call into `pool`, so an arbitrary/unallowlisted address is never touched.
+	mapping(ITwocrypto => bool) public isAllowedPool;
+
 	/// @notice Outstanding minted debt per pool.
 	mapping(ITwocrypto => Debt) public debts;
 
@@ -71,14 +79,21 @@ contract CurveSeedAdapterV1 is Context {
 
 	// ---------------------------------------------------------------------------------------
 
-	constructor(IStablecoinMetadata _usdu) {
+	/// @param _usdu USDU, present as coin(0) in every pool below.
+	/// @param _pools Fixed allowlist of pools this instance may seed/unwind. Immutable after deploy.
+	constructor(IStablecoinMetadata _usdu, ITwocrypto[] memory _pools) {
 		usdu = _usdu;
+		for (uint256 i = 0; i < _pools.length; ++i) {
+			isAllowedPool[_pools[i]] = true;
+		}
 	}
 
 	// ---------------------------------------------------------------------------------------
 
-	/// @dev Reverts unless `pool`'s coin(0) is USDU, and returns coin(1) (the other leg).
+	/// @dev Reverts unless `pool` is allowlisted and its coin(0) is USDU, and returns coin(1) (the
+	///      other leg). The allowlist check runs first so an unallowlisted address is never called.
 	function _verifyPool(ITwocrypto pool) internal view returns (IStablecoinMetadata other) {
+		if (!isAllowedPool[pool]) revert PoolNotAllowed(pool);
 		if (pool.coins(0) != address(usdu)) revert InvalidPool(pool);
 		other = IStablecoinMetadata(pool.coins(1));
 	}

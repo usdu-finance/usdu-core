@@ -53,6 +53,13 @@ describe('CurveSeedAdapterV1', function () {
 
 		[, other] = await ethers.getSigners();
 
+		// SEED_FORK_BLOCK's real historical baseFeePerGas spikes well above ethers' default fee
+		// estimate (derived from the preceding blocks' fee history), so the very first tx after a
+		// reset can underbid the next block — pin generous EIP-1559 overrides off the forked block
+		// itself rather than relying on auto-estimation here.
+		const forkedBaseFee = (await ethers.provider.getBlock('latest'))!.baseFeePerGas!;
+		const feeOverrides = { maxFeePerGas: forkedBaseFee * 4n, maxPriorityFeePerGas: forkedBaseFee };
+
 		await network.provider.request({ method: 'hardhat_impersonateAccount', params: [addr.curator] });
 		await network.provider.request({ method: 'hardhat_setBalance', params: [addr.curator, '0x56BC75E2D63100000'] }); // 100 ETH
 		curator = await ethers.getSigner(addr.curator);
@@ -65,7 +72,11 @@ describe('CurveSeedAdapterV1', function () {
 		chfuPool = await ethers.getContractAt('ITwocrypto', addr.curveTwocryptoNG_USDUCHFU);
 
 		const AdapterFactory = await ethers.getContractFactory('CurveSeedAdapterV1');
-		adapter = await AdapterFactory.deploy(addr.usduStable);
+		adapter = await AdapterFactory.deploy(
+			addr.usduStable,
+			[addr.curveTwocryptoNG_USDUEURU, addr.curveTwocryptoNG_USDUCHFU],
+			feeOverrides
+		);
 
 		// single adapter instance, registered as a module on all three stablecoins — real tokens with
 		// existing supply, so setModule goes through the pending + timelock path
@@ -97,17 +108,17 @@ describe('CurveSeedAdapterV1', function () {
 		).to.be.revertedWithCustomError(usdu, 'NotCuratorRole');
 	});
 
-	it('rejects a real pool whose coin(0) is not USDU', async function () {
+	it('rejects a pool not on the deploy-time allowlist', async function () {
 		const factory: ITwocryptoFactory = await ethers.getContractAt('ITwocryptoFactory', TWOCRYPTO_FACTORY);
 		const poolCountBefore = await factory.pool_count();
 
-		// EURU as coin(0), USDU as coin(1) — reversed order, should be rejected by _verifyPool
+		// a real, correctly-ordered USDU/EURU-shaped pool, but never passed to the adapter's constructor
 		await factory
 			.connect(curator)
 			.deploy_pool(
-				'EURU/USDU reversed',
-				'reversed',
-				[addr.euruStable, addr.usduStable],
+				'USDU/EURU unlisted',
+				'unlisted',
+				[addr.usduStable, addr.euruStable],
 				IMPLEMENTATION_ID,
 				FX_PRESET.A,
 				FX_PRESET.gamma,
@@ -119,11 +130,11 @@ describe('CurveSeedAdapterV1', function () {
 				FX_PRESET.ma_exp_time,
 				parseEther('1')
 			);
-		const reversedPool = await factory.pool_list(poolCountBefore);
+		const unlistedPool = await factory.pool_list(poolCountBefore);
 
-		await expect(adapter.connect(curator).seed(reversedPool, parseEther('100'), 0n, 0n))
-			.to.be.revertedWithCustomError(adapter, 'InvalidPool')
-			.withArgs(reversedPool);
+		await expect(adapter.connect(curator).seed(unlistedPool, parseEther('100'), 0n, 0n))
+			.to.be.revertedWithCustomError(adapter, 'PoolNotAllowed')
+			.withArgs(unlistedPool);
 	});
 
 	describe('USDU/EURU pool', function () {
