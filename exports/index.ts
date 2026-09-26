@@ -14,6 +14,7 @@ export * from './abis/curve/CurveAdapterV1_1';
 export * from './abis/curve/CurveAdapterV1_2';
 export * from './abis/curve/CurveSeedAdapterV1';
 export * from './abis/curve/helper/ICurveStableSwapNG';
+export * from './abis/curve/helper/ITwocrypto';
 
 // merkl abis
 export * from './abis/merkl/MerklRewardsV1';
