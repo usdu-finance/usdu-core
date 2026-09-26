@@ -7,23 +7,26 @@ import 'hardhat-deploy';
 import 'hardhat-abi-exporter';
 import 'hardhat-contract-sizer';
 import { HardhatUserConfig } from 'hardhat/config';
-import { getChildFromSeed } from './helper/wallet';
+import { Wallet } from 'ethers';
 
 import dotenv from 'dotenv';
 dotenv.config();
 
 // ---------------------------------------------------------------------------------------
 
-const indexParsed = process.env.DEPLOYER_SEED_INDEX;
-const index = indexParsed && indexParsed?.length > 0 ? parseInt(indexParsed) : 0;
+// const index = process.env.DEPLOYER_SEED_INDEX;
+// const start = index && index?.length > 0 ? parseInt(index) : 0;
 
-const seed = process.env.DEPLOYER_SEED;
-if (!seed) throw new Error('Failed to import the seed string from .env');
-const wallet = getChildFromSeed(seed, index); // deployer
+// const seed = process.env.DEPLOYER_SEED ?? process.env.DEPLOYER_ACCOUNT_SEED;
+// if (!seed) throw new Error('Failed to import the seed string from .env');
+// const deployer = getChildFromSeed(seed, start);
 
-// log infos
+const privateKey = process.env.PRIVATE_KEY;
+if (!privateKey) throw new Error('Missing PRIVATE_KEY in .env');
+const deployer = new Wallet(privateKey);
+
 console.log('### Deployer Wallet ###');
-console.log(wallet.address, `index: `, wallet.index);
+console.log(deployer.address, `index: `, (deployer as any).index ?? 0);
 
 const alchemy = process.env.ALCHEMY_RPC_KEY;
 if (alchemy?.length == 0 || !alchemy) console.log('WARN: No Alchemy Key found in .env');
@@ -50,7 +53,7 @@ const config: HardhatUserConfig = {
 			gas: 'auto',
 			gasPrice: 'auto',
 			gasMultiplier: 0.5,
-			accounts: [wallet.privateKey],
+			accounts: [deployer.privateKey],
 			timeout: 50_000,
 		},
 		hardhat: {
@@ -67,7 +70,7 @@ const config: HardhatUserConfig = {
 			chainId: 42161,
 			gas: 'auto',
 			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
+			accounts: [deployer.privateKey],
 			timeout: 50_000,
 		},
 		base: {
@@ -75,7 +78,7 @@ const config: HardhatUserConfig = {
 			chainId: 8453,
 			gas: 'auto',
 			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
+			accounts: [deployer.privateKey],
 			timeout: 50_000,
 		},
 		optimism: {
@@ -83,7 +86,7 @@ const config: HardhatUserConfig = {
 			chainId: 10,
 			gas: 'auto',
 			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
+			accounts: [deployer.privateKey],
 			timeout: 50_000,
 		},
 		polygon: {
@@ -91,7 +94,7 @@ const config: HardhatUserConfig = {
 			chainId: 137,
 			gas: 'auto',
 			gasPrice: 'auto',
-			accounts: [wallet.privateKey],
+			accounts: [deployer.privateKey],
 			timeout: 50_000,
 		},
 	},
