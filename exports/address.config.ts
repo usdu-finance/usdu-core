@@ -28,6 +28,8 @@ export const ADDRESS: ChainAddressMap = {
 		curveTwocryptoNG_USDUEURU: '0x114acEbbE474fA0c0DcDe6617D867d1A14d20ADA',
 		// https://etherscan.io/address/0x08f288c19cc8123280987acc85e2cc55c08b1e65
 		curveTwocryptoNG_USDUCHFU: '0x08F288C19cC8123280987ACc85e2cc55c08B1E65',
+		// https://etherscan.io/address/0x6bc3f741263561d1ad826a4e18e316127721e0ff
+		curveSeedAdapterV1: '0x6BC3F741263561D1ad826a4e18E316127721E0FF',
 
 		// swap modules and utils
 		usduSwapRouterV1: '0x2A51F412B4E3fc3a43605B8EB9917facF5b5a08E',

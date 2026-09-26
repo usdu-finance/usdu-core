@@ -57,6 +57,7 @@ export type ChainAddressMainnet = {
 	curveStableSwapNG_USDCUSDU_gauge: Address;
 	curveTwocryptoNG_USDUEURU: Address;
 	curveTwocryptoNG_USDUCHFU: Address;
+	curveSeedAdapterV1: Address;
 
 	// swap modules and utils
 	usduSwapRouterV1: Address;

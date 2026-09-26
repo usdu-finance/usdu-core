@@ -12,6 +12,7 @@ export * from './abis/aragon/AragonVetoMultiSig';
 export * from './abis/curve/CurveAdapterV1';
 export * from './abis/curve/CurveAdapterV1_1';
 export * from './abis/curve/CurveAdapterV1_2';
+export * from './abis/curve/CurveSeedAdapterV1';
 export * from './abis/curve/helper/ICurveStableSwapNG';
 
 // merkl abis
