@@ -1,4 +1,6 @@
 import { expect } from 'chai';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { ethers, network } from 'hardhat';
 import * as helper from '@nomicfoundation/hardhat-network-helpers';
 import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
@@ -9,9 +11,13 @@ import { ADDRESS } from '../../exports/address.config';
 import { ITwocrypto, IERC20, ISwapBridgeV1, ICurveStableSwapNG } from '../../typechain';
 import { evm_increaseTime, resetFork, setERC20Balance } from '../helper';
 
-import proposal from './fixtures/proposal-DCIP-16-actions.json';
 
 const addr = ADDRESS[mainnet.id];
+
+// DCIP-16's on-chain actions, as exported from the DAO proposal
+const proposal: { to: string; value: string; data: string }[] = JSON.parse(
+	readFileSync(join(__dirname, 'fixtures', 'proposal-DCIP-16-actions.json'), 'utf8')
+);
 
 // hardhat.config.ts's default fork pin — restored in `after()` below so this file doesn't leave the
 // shared Hardhat Network on a different block for whichever test file runs next.
