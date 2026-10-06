@@ -91,7 +91,7 @@ Position {
 1. `challenge`: anyone deposits `size` of their own collateral against the position's collateral. Guarded by `minimumPrice` against the owner lowering the price in the same block
 2. phase 1 (`family.challenge`): anyone can avert via `bid` by paying the position price to the challenger and receiving the challenger's collateral (the challenger can cancel for free). Cooldown 1 day. Not in the same block
 3. phase 2: Dutch auction, price falls linearly from the position price to 0. `bid` pays the offer, receives the position's collateral. The challenger gets their collateral back plus 2% of the offer. Cooldown 3 days
-4. settlement (shared with forced sales): the proportional debt is repaid out of the offer plus the proportional reserve. Excess is split: reserve ratio to the curator, the rest to the owner. Payouts to frozen accounts fall back to the curator, so a freeze cannot block a liquidation
+4. settlement (shared with forced sales): the proportional debt is repaid out of the offer plus the proportional reserve. Excess is split: reserve ratio to the curator, the rest to the owner.
 5. shortfall is written off as `badDebt` per family and does not free capacity. `coverBadDebt` burns stablecoin against it and frees the capacity again
 
 ## Maturity
