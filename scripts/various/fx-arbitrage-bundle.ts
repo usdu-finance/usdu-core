@@ -44,7 +44,7 @@ const GAS_LIMIT_PAYLOAD = 2_500_000n; // 5 DAO actions incl. two ~400k-gas pool 
 const GAS_LIMIT_ARB = 1_500_000n;
 
 // Priority fee paid to block builders (per tx).
-const PRIORITY_FEE = ethers.parseUnits('2', 'gwei');
+const PRIORITY_FEE = ethers.parseUnits('0.1', 'gwei');
 
 const BLOCK_TIME = 12;
 
@@ -98,7 +98,13 @@ async function post(builder: (typeof BUILDERS)[number], signer: ethers.Wallet, b
 
 const tag = (builder: (typeof BUILDERS)[number], offset: number) => `${builder.name.padEnd(10)} [+${offset}]`;
 
-async function submitToBuilder(builder: (typeof BUILDERS)[number], signedTxs: string[], blockNumber: number, offset: number, signer: ethers.Wallet) {
+async function submitToBuilder(
+	builder: (typeof BUILDERS)[number],
+	signedTxs: string[],
+	blockNumber: number,
+	offset: number,
+	signer: ethers.Wallet
+) {
 	const params: Record<string, unknown> = { txs: signedTxs, blockNumber: '0x' + blockNumber.toString(16) };
 	if (builder.uuid) params.replacementUuid = bundleUuid(offset);
 
@@ -209,9 +215,13 @@ async function main() {
 	}
 
 	console.log('\nBroadcasting to builders...');
-	await Promise.all(BLOCK_OFFSETS.flatMap((offset) => BUILDERS.map((b) => submitToBuilder(b, signedTxs, targetBlock + offset, offset, signer))));
+	await Promise.all(
+		BLOCK_OFFSETS.flatMap((offset) => BUILDERS.map((b) => submitToBuilder(b, signedTxs, targetBlock + offset, offset, signer)))
+	);
 	console.log(
-		`\nWindow: blocks ${targetBlock} → ${targetBlock + BLOCK_OFFSETS[BLOCK_OFFSETS.length - 1]} (~${BLOCK_OFFSETS.length * BLOCK_TIME}s). Re-run to extend, cancel with: npx ts-node scripts/various/fx-arbitrage-bundle.ts cancel`
+		`\nWindow: blocks ${targetBlock} → ${targetBlock + BLOCK_OFFSETS[BLOCK_OFFSETS.length - 1]} (~${
+			BLOCK_OFFSETS.length * BLOCK_TIME
+		}s). Re-run to extend, cancel with: npx ts-node scripts/various/fx-arbitrage-bundle.ts cancel`
 	);
 }
 
