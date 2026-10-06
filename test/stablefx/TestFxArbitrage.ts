@@ -29,6 +29,11 @@ const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const USDT = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
 const EURC = '0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c';
 const UNISWAP_ROUTER02 = '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45';
+// Locked call data for FxArbitrageEuruV1: Uniswap path USDC -(0.05%)-> EURC, and execute(10_000 EURC, path, 0).
+const UNI_PATH_USDC_EURC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f41abaea1f7c830bd89acc67ec4af516284b1bc33c';
+const EXECUTE_CALLDATA_10K =
+	'0xca72605800000000000000000000000000000000000000000000000000000002540be40000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f41abaea1f7c830bd89acc67ec4af516284b1bc33c000000000000000000000000000000000000000000';
+const MORPHO = '0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb';
 
 const UNISWAP_ABI = [
 	'function exactInput((bytes path, address recipient, uint256 amountIn, uint256 amountOutMinimum)) payable returns (uint256)',
@@ -324,5 +329,55 @@ describe('FX arbitrage: stale USDU/EURU + USDU/CHFU pools after DCIP-16 seeding'
 		// EURU in the pool was minted by CurveSeedAdapterV1, not by the EURC bridge, so the bridge's
 		// totalMinted (~1.4 EURU) is all it can ever burn/redeem — swapOut underflows beyond that.
 		await expect(routeBuyEuru(parseUnits('10000', 6))).to.be.rejectedWith(/panic code 0x11/);
+	});
+
+	it('Uniswap v3 fee tiers for the closing USDC -> EURC leg: which pool has the better liquidity', async function () {
+		const factory = new ethers.Contract('0x1F98431c8aD98523631AE4a59f267346ea31F984', ['function getPool(address,address,uint24) view returns (address)'], ethers.provider);
+		for (const fee of [100, 500, 3000, 10000]) {
+			const pool = await factory.getPool(USDC, EURC, fee);
+			if (pool === ethers.ZeroAddress) {
+				console.log(`fee ${fee}: no pool`);
+				continue;
+			}
+			const [usdcBal, eurcBal] = await Promise.all([usdc.balanceOf(pool), eurc.balanceOf(pool)]);
+			console.log(`fee ${fee}: ${pool} holds ${formatUnits(usdcBal, 6)} USDC + ${formatUnits(eurcBal, 6)} EURC`);
+		}
+	});
+
+	it('FxArbitrageEuruV1: Morpho flash loan of EURC, bridge -> pool -> pool -> Uniswap, profit to owner', async function () {
+		const factory = await ethers.getContractFactory('FxArbitrageEuruV1');
+		const bot = await factory.deploy(arb.address, MORPHO, UNISWAP_ROUTER02, await euruBridge.getAddress(), await euruPool.getAddress(), await usdcUsduPool.getAddress());
+		const path = UNI_PATH_USDC_EURC;
+
+		// the locked call data is what the addresses/fee encode to, and what execute() is called with
+		expect(ethers.solidityPacked(['address', 'uint24', 'address'], [USDC, 500, EURC])).to.equal(UNI_PATH_USDC_EURC);
+		expect(bot.interface.encodeFunctionData('execute', [parseUnits('10000', 6), path, 0n])).to.equal(EXECUTE_CALLDATA_10K);
+
+		// non-owner and wrong path are rejected
+		await expect(bot.connect(curator).execute(parseUnits('1000', 6), path, 0)).to.be.revertedWithCustomError(bot, 'OwnableUnauthorizedAccount');
+		await expect(bot.connect(arb).execute(parseUnits('1000', 6), ethers.solidityPacked(['address', 'uint24', 'address'], [EURC, 500, USDC]), 0)).to.be.revertedWithCustomError(bot, 'BadPath');
+		// the callback can't be driven by anyone but Morpho
+		await expect(bot.connect(arb).onMorphoFlashLoan(1, '0x')).to.be.revertedWithCustomError(bot, 'NotMorpho');
+
+		// size sweep (EURC)
+		const rows: { size: number; profit: bigint }[] = [];
+		for (const size of SIZES) {
+			try {
+				const profit = await bot.connect(arb).execute.staticCall(parseUnits(size.toString(), 6), path, 0);
+				rows.push({ size, profit });
+			} catch {
+				rows.push({ size, profit: -1n });
+			}
+		}
+		console.table(rows.map((r) => ({ size: r.size, profit: r.profit < 0n ? 'reverts (loss/liquidity)' : formatUnits(r.profit, 6) })));
+		const best = rows.reduce((a, b) => (b.profit > a.profit ? b : a));
+		expect(best.profit).to.be.greaterThan(0n);
+
+		// minProfit is enforced, then execute for real
+		await expect(bot.connect(arb).execute(parseUnits(best.size.toString(), 6), path, best.profit + 1n)).to.be.revertedWithCustomError(bot, 'InsufficientProfit');
+		const before = await bal(eurc);
+		await bot.connect(arb).execute(parseUnits(best.size.toString(), 6), path, best.profit);
+		expect((await bal(eurc)) - before).to.equal(best.profit);
+		expect(await eurc.balanceOf(await bot.getAddress())).to.equal(0n);
 	});
 });
