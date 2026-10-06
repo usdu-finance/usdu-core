@@ -267,8 +267,9 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 		Collateral storage c = _collaterals[p.proposal];
 		if (p.price < minimumPrice) revert UnexpectedPrice();
 		if (block.timestamp >= p.maturity) revert Expired();
-		if (size == 0 || (size < c.minBalance && size < p.balance)) revert ChallengeTooSmall();
-		if (size > p.balance - p.challenged) revert ChallengeTooLarge();
+		uint256 remaining = p.balance - p.challenged;
+		if (size == 0 || (size < c.minBalance && size < remaining)) revert ChallengeTooSmall(); // dust is fine if it is all that is left
+		if (size > remaining) revert ChallengeTooLarge();
 
 		_pull(c.collateral, _msgSender(), size);
 		p.challenged += size;
@@ -484,13 +485,8 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 		_emitUpdate(p);
 	}
 
-	/// @dev Stablecoin payout that can never block a liquidation, e.g. by a frozen recipient: falls back to the curator.
 	function _pay(address to, uint256 amount) internal {
-		if (amount == 0) return;
-		try stable.transfer(to, amount) returns (bool ok) {
-			if (ok) return;
-		} catch {}
-		stable.transfer(stable.curator(), amount);
+		if (amount > 0) stable.transfer(to, amount);
 	}
 
 	function _shrinkChallenge(uint256 number, Challenge memory ch, uint256 size) internal {
