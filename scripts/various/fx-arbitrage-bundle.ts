@@ -27,8 +27,8 @@ const SIGNER = '0x0170F42f224b99CcbbeE673093589c5f9691dd06';
 const DELAYED_ACTION = ADDRESS[1].aragonDelayedAction;
 const PROPOSAL_ID = 86556343630672508522658538266021539186885073574342444569249268028717067257335n;
 
-// FxArbitrageEuruV1 deployment (owner must be SIGNER) -- fill in after deploying via ignition
-const FX_ARB: string = '0x0000000000000000000000000000000000000000';
+// FxArbitrageEuruV1 deployment (owner must be SIGNER), deployed via ignition
+const FX_ARB: string = '0x58E169A5019B1DB1Df97509c1E46e943f4Ed23b2';
 
 // Flash loan size in EURC (6 decimals). Fork test (100k-depth seed): profit peaks ~10k, 15k is already thin and
 // >= 20k loses to slippage in the USDU/EURU pool.
