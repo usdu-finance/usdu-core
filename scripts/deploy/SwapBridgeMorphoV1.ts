@@ -64,7 +64,7 @@ const SALT = ethers.id('usdu-finance/SwapBridgeMorphoV1');
 
 const CONFIG = {
 	// max stablecoin this bridge may mint against new deposits (18 decimals) — start conservative
-	mintCap: ethers.parseEther('0.1') * 1_000_000n,
+	mintCap: ethers.parseEther('20000'),
 
 	// swap-in fee: coin -> stablecoin, in parts per million (e.g. 3_000 = 0.3%)
 	swapInFeePPM: 1_000n,
