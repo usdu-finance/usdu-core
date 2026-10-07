@@ -48,6 +48,8 @@ export const ADDRESS: ChainAddressMap = {
 		euruSwapRouterV1: '0x6a5c8fC7d1697088Ff41F76Ca15C0eA59E02081c',
 		euruSwapBridgeMorphoV1_steakEURC_vault: '0xbeef003E31546C7210687f1A7b40d096BE83ec58',
 		euruSwapBridgeMorphoV1_steakEURC_module: '0x83F263eF950586Ce3C35D58930f0d2001fe79c50',
+		euruSwapBridgeMorphoV1_dEURO_vault: '0x1F0e1d27b3D7F8A73D03a10D3078C32933297e90',
+		euruSwapBridgeMorphoV1_dEURO_module: '0xA39665F17592c69B6876CE70FdD12c1890D3ae36',
 
 		// ###############
 		// Stablecoin CHFU
