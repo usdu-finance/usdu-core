@@ -66,6 +66,9 @@ export type ChainAddressMainnet = {
 	usduSwapBridgeMorphoV1_steakUSDT_vault: Address;
 	usduSwapBridgeMorphoV1_steakUSDT_module: Address;
 
+	// reward streamer
+	usduStreamerVaultV1: Address;
+
 	// ###############
 	// Stablecoin EURU
 	// ###############
@@ -79,6 +82,9 @@ export type ChainAddressMainnet = {
 	euruSwapBridgeMorphoV1_dEURO_vault: Address;
 	euruSwapBridgeMorphoV1_dEURO_module: Address;
 
+	// reward streamer
+	euruStreamerVaultV1: Address;
+
 	// ###############
 	// Stablecoin CHFU
 	// ###############
@@ -89,6 +95,9 @@ export type ChainAddressMainnet = {
 	chfuSwapRouterV1: Address;
 	chfuSwapBridgeMorphoV1_ZCHF_vault: Address;
 	chfuSwapBridgeMorphoV1_ZCHF_module: Address;
+
+	// reward streamer
+	chfuStreamerVaultV1: Address;
 
 	// ##################
 	// external protocols
