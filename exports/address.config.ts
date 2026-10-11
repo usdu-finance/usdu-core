@@ -38,6 +38,10 @@ export const ADDRESS: ChainAddressMap = {
 		usduSwapBridgeMorphoV1_steakUSDT_vault: '0xbeef003C68896c7D2c3c60d363e8d71a49Ab2bf9',
 		usduSwapBridgeMorphoV1_steakUSDT_module: '0xd9141f634Ef9E871A5FE4f64195747DB77A13f3E',
 
+		// reward streamer (rUSDU, 90 days)
+		// https://etherscan.io/address/0xF11014a7384Af2Ed7Ef44b8BeE2e080033DD840B
+		usduStreamerVaultV1: '0xF11014a7384Af2Ed7Ef44b8BeE2e080033DD840B',
+
 		// ###############
 		// Stablecoin EURU
 		// ###############
@@ -51,6 +55,10 @@ export const ADDRESS: ChainAddressMap = {
 		euruSwapBridgeMorphoV1_dEURO_vault: '0x1F0e1d27b3D7F8A73D03a10D3078C32933297e90',
 		euruSwapBridgeMorphoV1_dEURO_module: '0xA39665F17592c69B6876CE70FdD12c1890D3ae36',
 
+		// reward streamer (rEURU, 90 days)
+		// https://etherscan.io/address/0x39E834b8fD5029C2f90EB0101686eAa6CD113c3b
+		euruStreamerVaultV1: '0x39E834b8fD5029C2f90EB0101686eAa6CD113c3b',
+
 		// ###############
 		// Stablecoin CHFU
 		// ###############
@@ -61,6 +69,10 @@ export const ADDRESS: ChainAddressMap = {
 		chfuSwapRouterV1: '0xE8c10BEbde8C6a5611297184be2520fd47bdc34A',
 		chfuSwapBridgeMorphoV1_ZCHF_vault: '0xE5F130253fF137f9917C0107659A4c5262abf6b0',
 		chfuSwapBridgeMorphoV1_ZCHF_module: '0x19ff1079d9CdA8E415af4C95cFEb5A2f47Da1d15',
+
+		// reward streamer (rCHFU, 90 days)
+		// https://etherscan.io/address/0x87aFBB259b5766D5F71736d5e2F4369a67eB3d20
+		chfuStreamerVaultV1: '0x87aFBB259b5766D5F71736d5e2F4369a67eB3d20',
 
 		// ##################
 		// external protocols

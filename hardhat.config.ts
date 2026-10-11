@@ -98,62 +98,12 @@ const config: HardhatUserConfig = {
 			timeout: 50_000,
 		},
 	},
+	// Etherscan v2: one API key for all chains, hardhat-verify adds the chainid itself
 	etherscan: {
-		apiKey: {
-			// @ts-ignore
-			mainnet: etherscan,
-			// @ts-ignore
-			arbitrum: etherscan,
-			// @ts-ignore
-			base: etherscan,
-			// @ts-ignore
-			optimism: etherscan,
-			// @ts-ignore
-			polygon: etherscan,
-		},
-		customChains: [
-			{
-				network: 'mainnet',
-				chainId: 1,
-				urls: {
-					apiURL: 'https://api.etherscan.io/v2/api?chainid=1',
-					browserURL: 'https://etherscan.io',
-				},
-			},
-			{
-				network: 'arbitrum',
-				chainId: 42161,
-				urls: {
-					apiURL: 'https://api.etherscan.io/v2/api?chainid=42161',
-					browserURL: 'https://arbiscan.io',
-				},
-			},
-			{
-				network: 'base',
-				chainId: 8453,
-				urls: {
-					apiURL: 'https://api.etherscan.io/v2/api?chainid=8453',
-					browserURL: 'https://basescan.org',
-				},
-			},
-			{
-				network: 'optimism',
-				chainId: 10,
-				urls: {
-					apiURL: 'https://api.etherscan.io/v2/api?chainid=10',
-					browserURL: 'https://optimistic.etherscan.io',
-				},
-			},
-			{
-				network: 'polygon',
-				chainId: 137,
-				urls: {
-					apiURL: 'https://api.etherscan.io/v2/api?chainid=137',
-					browserURL: 'https://polygonscan.com',
-				},
-			},
-		],
+		apiKey: etherscan ?? '',
 	},
+	// Kept enabled. hardhat-verify 2.1.3 (last Hardhat 2 release) still calls Sourcify API v1, which was removed,
+	// so this reports a harmless 404 on verify. Etherscan is unaffected. Needs Hardhat 3 / hardhat-verify 3 to work again.
 	sourcify: {
 		enabled: true,
 	},
