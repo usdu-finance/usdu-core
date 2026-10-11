@@ -80,4 +80,41 @@ describe('StreamerVaultV1', function () {
 		await vault.redeem(await vault.balanceOf(alice.address), alice.address, alice.address);
 		expect(await vault.totalAssets()).to.equal(0n);
 	});
+
+	describe('empty vault mid-stream', function () {
+		beforeEach(async function () {
+			await vault.deposit(parseEther('1000'), alice.address);
+			await token.transfer(vault, parseEther('100'));
+			await vault.sync();
+			await evm_increaseTime(300);
+			await vault.redeem(await vault.balanceOf(alice.address), alice.address, alice.address);
+			await evm_increaseTime(400); // stream keeps unlocking with nobody staked
+		});
+
+		it('leaves supply 0 with unlocked assets and a running stream', async function () {
+			expect(await vault.totalSupply()).to.equal(0n);
+			expect(await vault.totalAssets()).to.be.closeTo(parseEther('40'), parseEther('0.5'));
+			expect(await vault.locked()).to.be.closeTo(parseEther('30'), parseEther('0.5'));
+		});
+
+		it('first depositor gets 1:1 shares, not zero', async function () {
+			expect(await vault.previewDeposit(parseEther('10'))).to.equal(parseEther('10'));
+			expect(await vault.previewMint(parseEther('10'))).to.equal(parseEther('10'));
+			await vault.connect(bob).deposit(parseEther('10'), bob.address);
+			expect(await vault.balanceOf(bob.address)).to.equal(parseEther('10'));
+		});
+
+		it('first depositor owns the already-unlocked part and the rest of the stream', async function () {
+			await vault.connect(bob).deposit(parseEther('10'), bob.address);
+			expect(await vault.maxWithdraw(bob.address)).to.be.closeTo(parseEther('50'), parseEther('0.5'));
+			await evm_increaseTime(1000);
+			expect(await vault.maxWithdraw(bob.address)).to.be.closeTo(parseEther('80'), parseEther('0.5'));
+			await vault.connect(bob).redeem(await vault.balanceOf(bob.address), bob.address, bob.address);
+			expect(await token.balanceOf(vault)).to.be.lt(10n);
+		});
+
+		it('price shows 1.0 while empty', async function () {
+			expect(await vault.price()).to.equal(parseEther('1'));
+		});
+	});
 });

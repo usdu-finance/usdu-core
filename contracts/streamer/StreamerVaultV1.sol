@@ -111,6 +111,17 @@ contract StreamerVaultV1 is ERC4626 {
 		return totalDeposits + totalFunded - totalWithdrawn - locked();
 	}
 
+	/// @dev With no shares outstanding, convert 1:1. The default 4626 maths would price a share-wei at the whole
+	///      `totalAssets` (e.g. rewards that unlocked while the vault was empty) and mint 0 shares for small deposits.
+	///      The first staker after an empty period owns everything in the vault, including what unlocked meanwhile.
+	function _convertToShares(uint256 assets, Math.Rounding rounding) internal view override returns (uint256) {
+		return totalSupply() == 0 ? assets : super._convertToShares(assets, rounding);
+	}
+
+	function _convertToAssets(uint256 shares, Math.Rounding rounding) internal view override returns (uint256) {
+		return totalSupply() == 0 ? shares : super._convertToAssets(shares, rounding);
+	}
+
 	function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override {
 		sync();
 		// transfer before mint, see OZ ERC4626
