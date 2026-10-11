@@ -67,8 +67,8 @@ async function main() {
 	const wallet = getWallet(provider);
 	const assetInfo = await getERC20Details(provider, asset);
 
-	const name = `${assetInfo.symbol} Rewards Streamer`;
-	const symbol = `str${assetInfo.symbol}`;
+	const name = `${assetInfo.symbol} Rewards`;
+	const symbol = `r${assetInfo.symbol}`;
 
 	console.log('### StreamerVaultV1 deployment ###');
 	console.log('Coin:           ', coin);
@@ -115,7 +115,7 @@ async function main() {
 	console.log('StreamerVaultV1:', address);
 	console.log('');
 	console.log('Verify with:');
-	console.log(`  npx hardhat verify --network ${network} ${address} ${args.map((a) => a.toString()).join(' ')}`);
+	console.log(`  npx hardhat verify --network ${network} ${address} ${args.map((a) => (typeof a === 'string' && a.includes(' ') ? `"${a}"` : a.toString())).join(' ')}`);
 }
 
 main().catch((error) => {
