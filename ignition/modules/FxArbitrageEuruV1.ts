@@ -41,8 +41,8 @@ storeConstructorArgs(FILE, args);
 console.log('Constructor Args');
 console.log(args);
 
-// fail safe
-process.exit();
+// fail safe: set CONFIRM_DEPLOY=1 to actually deploy
+if (!process.env.CONFIRM_DEPLOY) process.exit();
 
 export default buildModule(MOD, (m) => {
 	return {

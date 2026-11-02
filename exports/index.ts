@@ -68,6 +68,10 @@ export * from './abis/stablecoin/IStablecoinMetadata';
 export * from './abis/stablecoin/IStablecoinModifier';
 export * from './abis/stablecoin/Stablecoin';
 
+// zap abis
+export * from './abis/zap/ZapperSwapEnsoV1';
+export * from './abis/zap/IZapperSwapEnsoV1';
+
 // streamer abis
 export * from './abis/streamer/StreamerVaultV1';
 
