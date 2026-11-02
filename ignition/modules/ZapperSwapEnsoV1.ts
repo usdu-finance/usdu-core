@@ -24,8 +24,9 @@ export const params: DeploymentParams = {
 	// The only target of Call steps, which receive caller-supplied calldata. NEVER a token or anything else that can
 	// move funds on behalf of the zapper, such as a vault share or Curve LP token. Do not copy it from docs: Enso ships
 	// new router versions and advises using the `tx.to` of a live /shortcuts/route response, so take it from a real
-	// quote and verify the contract on Etherscan before deploying.
-	ensoRouter: zeroAddress,
+	// quote and verify the contract on Etherscan before deploying. This one matched the `tx.to` of a live quote
+	// (2026-11-02), has code and is not an EIP-1967 proxy; re-check before a later deployment.
+	ensoRouter: '0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf',
 	// Typed hops, only ever called with the zapper's own balances and itself as receiver
 	hopTargets: [
 		// swap routers
@@ -60,8 +61,8 @@ storeConstructorArgs(FILE, args);
 console.log('Constructor Args');
 console.log(args);
 
-// fail safe
-process.exit();
+// fail safe: set CONFIRM_DEPLOY=1 to actually deploy
+if (!process.env.CONFIRM_DEPLOY) process.exit();
 
 export default buildModule(MOD, (m) => {
 	return {

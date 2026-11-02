@@ -47,8 +47,8 @@ yarn compile          # Compile contracts
 yarn test            # Run tests
 yarn coverage        # Test coverage
 
-# Deployment
-yarn deploy ignition/modules/StablecoinModule.ts --network mainnet --verify
+# Deployment (ignition modules exit unless CONFIRM_DEPLOY=1 is set, as a fail safe)
+CONFIRM_DEPLOY=1 yarn deploy ignition/modules/StablecoinModule.ts --network mainnet --verify
 
 # Package
 yarn npm:build       # Build for npm
