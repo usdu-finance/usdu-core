@@ -74,6 +74,13 @@ export const ADDRESS: ChainAddressMap = {
 		// https://etherscan.io/address/0x87aFBB259b5766D5F71736d5e2F4369a67eB3d20
 		chfuStreamerVaultV1: '0x87aFBB259b5766D5F71736d5e2F4369a67eB3d20',
 
+		// ######
+		// zapper
+		// ######
+		// one-transaction entry from any token (Enso router 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf) into the stablecoins and reward vaults
+		// https://etherscan.io/address/0xB82D2dC575D815C282e8280952919A2A1CF0D3F2
+		zapperSwapEnsoV1: '0xB82D2dC575D815C282e8280952919A2A1CF0D3F2',
+
 		// ##################
 		// external protocols
 		// ##################

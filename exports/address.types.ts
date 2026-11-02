@@ -99,6 +99,11 @@ export type ChainAddressMainnet = {
 	// reward streamer
 	chfuStreamerVaultV1: Address;
 
+	// ######
+	// zapper
+	// ######
+	zapperSwapEnsoV1: Address;
+
 	// ##################
 	// external protocols
 	// ##################
