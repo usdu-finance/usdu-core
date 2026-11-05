@@ -13,7 +13,7 @@ interface IBorrowMarketV1 {
 	struct MarketParams {
 		address collateral; // ERC20, max 24 decimals, must transfer exactly the requested amount
 		uint64 maturity; // latest maturity any position of this market may choose
-		uint64 challengePhase; // length of one challenge phase (the auction runs for two phases)
+		uint64 auction; // duration of every auction of this market, falling from 10x the position price to 0
 		uint256 minBalance; // minimum collateral balance of a position, prevents dust
 		uint256 price; // highest position price, (36 - decimals) decimals
 		uint256 reserve; // 1e18 scaled share of every mint that is locked as reserve
@@ -26,7 +26,7 @@ interface IBorrowMarketV1 {
 		uint256 marketId;
 		address collateral;
 		uint64 maturity;
-		uint64 challengePhase;
+		uint64 auction;
 		uint256 minBalance;
 		uint256 price;
 		uint256 reserve;
@@ -75,7 +75,7 @@ interface IBorrowMarketV1 {
 	event ChallengeStarted(address indexed challenger, uint256 indexed positionId, uint256 size, uint256 challengeId);
 	event ChallengeAverted(uint256 indexed positionId, uint256 challengeId, uint256 size);
 	event ChallengeSucceeded(uint256 indexed positionId, uint256 challengeId, uint256 bid, uint256 size);
-	event ForcedSale(uint256 indexed positionId, uint256 amount, uint256 price);
+	event ExpiredBought(uint256 indexed positionId, uint256 amount, uint256 price);
 	event BadDebt(uint256 indexed marketId, uint256 amount, uint256 total);
 
 	error InvalidMarket();
@@ -96,7 +96,6 @@ interface IBorrowMarketV1 {
 	error InvalidPrice();
 	error ChallengeTooSmall();
 	error ChallengeTooLarge();
-	error SameBlock();
 
 	// ---------------------------------------------------------------------------------------
 	// markets (curator)
@@ -141,6 +140,8 @@ interface IBorrowMarketV1 {
 	function getMarket(uint256 marketId) external view returns (Market memory);
 
 	function getPosition(uint256 positionId) external view returns (Position memory);
+
+	function getChallenge(uint256 challengeId) external view returns (Challenge memory);
 
 	function isAuthorized(uint256 positionId, address operator) external view returns (bool);
 

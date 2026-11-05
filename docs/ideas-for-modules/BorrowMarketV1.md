@@ -20,7 +20,7 @@ Market {
     marketId: uint256        market id (proposal id)
     collateral: address
     maturity: uint64    latest maturity a position of this market may choose
-    challengePhase: uint64      NEW: length of one challenge phase, 1 - 30 days
+    auction: uint64             NEW: duration of every auction of the market, 1 - 30 days
     minBalance: uint256    minimum collateral balance, prevents dust
     price: uint256    10**(36 - decimals), the "highest price" of the market
     reserve: uint256    1e18 scaled share of every mint that is locked
@@ -34,8 +34,8 @@ Market {
 Guards on proposal:
 
 -   decimals <= 24 (leaves 12 digits for the price)
--   reserve between 10% and **90%** (was 100%: repayment divides by `1 - reserve`)
--   rate <= 100%, maturity in the future, challenge phase 1 - 30 days
+-   reserve between 10% and **50%** (repayment divides by `1 - reserve`, and above 50% the effective LTV `1 - ltv - reserve - fee` is too small to be useful)
+-   rate <= 100%, maturity in the future, auction duration 1 - 30 days
 -   `minBalance * price <= limit * 1e18`, so a minimal position fits the limit
 -   collateral must transfer exactly the requested amount (fee-on-transfer is rejected)
 
@@ -87,18 +87,32 @@ Position {
 -   `setAuthorized`: owner
 -   transfer / sell the NFT
 
+## Auction curve (challenges and expired positions)
+
+One curve for everything. It starts at 10x the position price and falls to 0 within the market's `auction` duration (1 - 30 days):
+
+```
+price(t) = 10 * positionPrice * (1 - t / duration)^2
+```
+
+It falls fast at first and ever slower: 2.5x after half the duration, 1x after ~68% of it, then a long tail towards 0. Two `mulDiv`s, no libraries. See `BorrowMarketV1-auction-curve.html` for a chart.
+
 ## Challenges (oracle-free liquidation)
 
-1. `challenge`: anyone deposits `size` of their own collateral against the position's collateral. Guarded by `minimumPrice` against the owner lowering the price in the same block
-2. phase 1 (`market.challenge`): anyone can avert via `bid` by paying the position price to the challenger and receiving the challenger's collateral (the challenger can cancel for free). Cooldown 1 day. Not in the same block
-3. phase 2: Dutch auction, price falls linearly from the position price to 0. `bid` pays the offer, receives the position's collateral. The challenger gets their collateral back plus 2% of the offer. Cooldown 3 days
-4. settlement (shared with forced sales): the proportional debt is repaid out of the offer plus the proportional reserve. Excess is split: reserve ratio to the curator, the rest to the owner.
-5. shortfall is written off as `badDebt` (a field of the market) and does not free capacity. `coverBadDebt` burns stablecoin against it and frees the capacity again
+1. `challenge`: anyone deposits `size` of their own collateral against the position's collateral. Guarded by `minimumPrice` against the owner lowering the price in the same block. The deposit is locked until the auction has sold it (or the position's collateral), there is no cancel
+2. `bid` at the current auction price, two outcomes depending on the price:
+    -   **at or above the position price: averted.** The bidder pays the challenger and receives the challenger's collateral. The position is untouched, cooldown 3 days. A challenger whose collateral is bought at a high price is simply paid for it, so there is nothing to monitor
+    -   **below the position price: succeeded.** The bidder pays the offer and receives the position's collateral. The challenger gets their collateral back plus a reward of `reserve * 20%` of the offer (e.g. 10% reserve -> 2%, `AUCTION_REWARD_SHARE`). Cooldown 5 days
+3. settlement (shared with expired positions): the proportional debt is repaid out of the offer (minus the reward) plus the proportional reserve. The owner is liquidated and gets nothing of the excess: all of it goes to the curator, after the market's bad debt is covered. The only case where the owner gets paid is an expired position sold at or above its position price (reserve ratio of the excess to the curator, the rest to the owner).
+4. shortfall is written off as `badDebt` (a field of the market) and does not free capacity. `coverBadDebt` burns stablecoin against it and frees the capacity again
 
 ## Maturity
 
 -   after maturity: no mint, no price change, no new challenge
--   `buyExpired`: forced sale, price starts at 10x the position price, falls to 1x within one challenge phase and to 0 within another. Same settlement as a successful challenge. Not while a challenge is open
+-   `buyExpired`: same curve, starting at maturity, no challenger and no deposit. Same settlement as a succeeded challenge. Not while a challenge is open
+    -   price at or above the position price: the curator receives the expiry fee (`reserve * 20%` of the offer) out of the proceeds, on top of its reserve share of the excess
+    -   price below the position price: no fee, the owner forfeits the excess. The proceeds repay the debt first, everything that is left goes to the curator
+-   everything the curator receives from an auction (reserve share of the excess, expiry fee, forfeited excess) first covers the market's `badDebt`, which frees its capacity again, only the rest is paid out
 
 ## Open questions / not included
 
@@ -107,4 +121,3 @@ Position {
 -   guardian kill switch for a live market (for now only the module expiry on the stablecoin)
 -   rolling / extending maturity
 -   implement `IModuleRevenueV1` / `IModuleExpenseV1`? Fees go to the curator directly today
--   tests: open, mint, repay, averted challenge, successful challenge with excess and with bad debt, `buyExpired`, authorization epoch

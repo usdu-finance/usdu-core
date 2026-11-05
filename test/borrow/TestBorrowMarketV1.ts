@@ -16,8 +16,10 @@ const RESERVE = E('0.2');
 const RATE = E('0.05');
 const LIMIT = E('1000000');
 const MIN_BALANCE = E('0.1');
-const PHASE = 3n * DAY;
-const REWARD = E('0.02');
+const DURATION = 4n * DAY; // auction duration of the market
+const COOLDOWN_AVERTED = 3n * DAY;
+const COOLDOWN_SUCCEEDED = 5n * DAY;
+const REWARD_SHARE = E('0.2'); // share of the market reserve that is paid out of an auction (challenger reward / expiry fee)
 
 describe('BorrowMarketV1', function () {
 	async function deploy() {
@@ -56,7 +58,7 @@ describe('BorrowMarketV1', function () {
 		const params = {
 			collateral: await f.token.getAddress(),
 			maturity: now + 2n * YEAR,
-			challengePhase: PHASE,
+			auction: DURATION,
 			minBalance: MIN_BALANCE,
 			price: PRICE,
 			reserve: RESERVE,
@@ -96,14 +98,19 @@ describe('BorrowMarketV1', function () {
 	async function fixtureWithChallenge() {
 		const f = await fixtureWithDebt();
 		await f.market.connect(f.challenger).challenge(f.positionId, ONE, 0);
-		const ch = await f.market.challenges(0);
+		const ch = await f.market.getChallenge(0);
 		return { ...f, challengeId: 0n, start: ch.startTime };
 	}
 
 	const blockTime = async (tx: any) => BigInt((await ethers.provider.getBlock((await tx.wait()).blockNumber))!.timestamp);
 
-	const auctionOffer = (elapsed: bigint, size: bigint, price = PRICE, phase = PHASE) =>
-		(((price / phase) * (phase - elapsed)) * size) / ONE;
+	/** Auction price per token after `elapsed` seconds: 10x the position price, falling quadratically to 0 at DURATION. */
+	const curve = (elapsed: bigint, price = PRICE) => {
+		if (elapsed >= DURATION) return 0n;
+		const remaining = DURATION - elapsed;
+		return (((10n * price * remaining) / DURATION) * remaining) / DURATION;
+	};
+	const reward = (offer: bigint) => (offer * RESERVE * REWARD_SHARE) / (ONE * ONE);
 
 	// ---------------------------------------------------------------------------------------
 
@@ -123,7 +130,7 @@ describe('BorrowMarketV1', function () {
 				f.market.connect(f.user).proposeMarket({
 					collateral: await f.token.getAddress(),
 					maturity: BigInt(await time.latest()) + YEAR,
-					challengePhase: PHASE,
+					auction: DURATION,
 					minBalance: MIN_BALANCE,
 					price: PRICE,
 					reserve: RESERVE,
@@ -149,10 +156,10 @@ describe('BorrowMarketV1', function () {
 		const invalid: [string, Record<string, any>][] = [
 			['zero collateral', { collateral: ethers.ZeroAddress }],
 			['more than 24 decimals', {}],
-			['challenge phase too short', { challengePhase: DAY - 1n }],
-			['challenge phase too long', { challengePhase: 30n * DAY + 1n }],
+			['auction too short', { auction: DAY - 1n }],
+			['auction too long', { auction: 30n * DAY + 1n }],
 			['reserve below 10%', { reserve: E('0.099') }],
-			['reserve above 90%', { reserve: E('0.91') }],
+			['reserve above 50%', { reserve: E('0.51') }],
 			['zero minBalance', { minBalance: 0n }],
 			['zero price', { price: 0n }],
 			['zero limit', { limit: 0n }],
@@ -619,7 +626,7 @@ describe('BorrowMarketV1', function () {
 			await expect(tx).to.emit(f.market, 'ChallengeStarted').withArgs(f.challenger.address, f.positionId, ONE / 2n, 0);
 
 			expect(await f.market.challengeCount()).to.equal(1n);
-			const ch = await f.market.challenges(0);
+			const ch = await f.market.getChallenge(0);
 			expect(ch.challenger).to.equal(f.challenger.address);
 			expect(ch.positionId).to.equal(f.positionId);
 			expect(ch.collateralSize).to.equal(ONE / 2n);
@@ -667,50 +674,52 @@ describe('BorrowMarketV1', function () {
 			await expect(f.market.connect(f.user).withdraw(f.positionId, 1, f.user.address)).to.be.revertedWithCustomError(f.market, 'Challenged');
 		});
 
-		describe('averted (first phase)', function () {
-			it('a bidder buys the challenger collateral at the position price', async function () {
+		describe('averted (at or above the position price)', function () {
+			it('a bidder buys the challenger collateral at the auction price', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
+				const elapsed = DURATION / 2n; // 2.5x the position price
+				const price = curve(elapsed);
+				expect(price).to.equal(E('50000'));
 				const bidderStable = await f.stable.balanceOf(f.bidder.address);
 				const challengerStable = await f.stable.balanceOf(f.challenger.address);
 				const bidderToken = await f.token.balanceOf(f.bidder.address);
 
-				await time.setNextBlockTimestamp(f.start + DAY);
+				await time.setNextBlockTimestamp(f.start + elapsed);
 				await expect(f.market.connect(f.bidder).bid(f.challengeId, ONE))
 					.to.emit(f.market, 'ChallengeAverted')
 					.withArgs(f.positionId, f.challengeId, ONE);
 
-				expect(bidderStable - (await f.stable.balanceOf(f.bidder.address))).to.equal(PRICE);
-				expect((await f.stable.balanceOf(f.challenger.address)) - challengerStable).to.equal(PRICE);
+				expect(bidderStable - (await f.stable.balanceOf(f.bidder.address))).to.equal(price);
+				expect((await f.stable.balanceOf(f.challenger.address)) - challengerStable).to.equal(price);
 				expect((await f.token.balanceOf(f.bidder.address)) - bidderToken).to.equal(ONE);
 
 				const p = await f.market.getPosition(f.positionId);
 				expect(p.challenged).to.equal(0n);
 				expect(p.balance).to.equal(ONE); // the position is untouched
 				expect(p.borrowed).to.equal(E('10000'));
-				expect((await f.market.challenges(f.challengeId)).challenger).to.equal(ethers.ZeroAddress);
+				expect((await f.market.getChallenge(f.challengeId)).challenger).to.equal(ethers.ZeroAddress);
 			});
 
-			it('starts a 1 day cooldown on the position', async function () {
+			it('averting right after the challenge costs about 10x the position price', async function () {
+				const f = await loadFixture(fixtureWithChallenge);
+				await time.setNextBlockTimestamp(f.start + 1n);
+				const before = await f.stable.balanceOf(f.bidder.address);
+				await f.market.connect(f.bidder).bid(f.challengeId, ONE);
+				expect(before - (await f.stable.balanceOf(f.bidder.address))).to.equal(curve(1n));
+				expect(curve(1n)).to.be.gt(E('199990'));
+			});
+
+			it('starts a cooldown on the position', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
 				const tx = await f.market.connect(f.bidder).bid(f.challengeId, ONE);
-				expect((await f.market.getPosition(f.positionId)).cooldown).to.equal((await blockTime(tx)) + DAY);
+				expect((await f.market.getPosition(f.positionId)).cooldown).to.equal((await blockTime(tx)) + COOLDOWN_AVERTED);
 				await expect(f.market.connect(f.user).mint(f.positionId, 1, f.user.address)).to.be.revertedWithCustomError(f.market, 'Hot');
-			});
-
-			it('the challenger can cancel for free', async function () {
-				const f = await loadFixture(fixtureWithChallenge);
-				const stableBefore = await f.stable.balanceOf(f.challenger.address);
-				const tokenBefore = await f.token.balanceOf(f.challenger.address);
-				await f.market.connect(f.challenger).bid(f.challengeId, ONE);
-				expect(await f.stable.balanceOf(f.challenger.address)).to.equal(stableBefore);
-				expect((await f.token.balanceOf(f.challenger.address)) - tokenBefore).to.equal(ONE);
-				expect((await f.market.getPosition(f.positionId)).challenged).to.equal(0n);
 			});
 
 			it('can be averted partially', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
 				await f.market.connect(f.bidder).bid(f.challengeId, ONE / 4n);
-				expect((await f.market.challenges(f.challengeId)).collateralSize).to.equal((ONE * 3n) / 4n);
+				expect((await f.market.getChallenge(f.challengeId)).collateralSize).to.equal((ONE * 3n) / 4n);
 				expect((await f.market.getPosition(f.positionId)).challenged).to.equal((ONE * 3n) / 4n);
 			});
 
@@ -722,18 +731,19 @@ describe('BorrowMarketV1', function () {
 			});
 		});
 
-		describe('succeeded (second phase)', function () {
-			const half = PHASE / 2n;
+		describe('succeeded (below the position price)', function () {
+			const elapsed = (DURATION * 3n) / 4n; // price is 0.625x the position price
 
-			it('sells the position collateral, repays the debt and pays out the excess', async function () {
+			it('sells the position collateral, repays the debt and the curator gets the excess', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
-				const t = f.start + PHASE + half;
-				const offer = auctionOffer(half, ONE);
-				const reward = (offer * REWARD) / ONE;
-				const funds = offer - reward;
+				const t = f.start + elapsed;
+				const offer = curve(elapsed);
+				expect(offer).to.equal(E('12500'));
+				const fee = reward(offer);
+				const funds = offer - fee;
 				const due = E('8000');
-				const excess = funds - due;
-				const profit = (excess * RESERVE) / ONE;
+				const excess = funds - due; // the owner is liquidated: all of it goes to the curator
+				expect(excess).to.equal(E('4000'));
 
 				const supply = await f.stable.totalSupply();
 				const bidderStable = await f.stable.balanceOf(f.bidder.address);
@@ -750,17 +760,17 @@ describe('BorrowMarketV1', function () {
 
 				expect(bidderStable - (await f.stable.balanceOf(f.bidder.address))).to.equal(offer);
 				expect((await f.token.balanceOf(f.bidder.address)) - bidderToken).to.equal(ONE);
-				expect((await f.stable.balanceOf(f.challenger.address)) - challengerStable).to.equal(reward);
+				expect((await f.stable.balanceOf(f.challenger.address)) - challengerStable).to.equal(fee);
 				expect((await f.token.balanceOf(f.challenger.address)) - challengerToken).to.equal(ONE);
-				expect((await f.stable.balanceOf(f.user.address)) - ownerStable).to.equal(excess - profit);
-				expect((await f.stable.balanceOf(f.curator.address)) - curatorStable).to.equal(profit);
+				expect(await f.stable.balanceOf(f.user.address)).to.equal(ownerStable);
+				expect((await f.stable.balanceOf(f.curator.address)) - curatorStable).to.equal(excess);
 
 				const p = await f.market.getPosition(f.positionId);
 				expect(p.balance).to.equal(0n);
 				expect(p.borrowed).to.equal(0n);
 				expect(p.reserve).to.equal(0n);
 				expect(p.challenged).to.equal(0n);
-				expect(p.cooldown).to.equal(t + 3n * DAY);
+				expect(p.cooldown).to.equal(t + COOLDOWN_SUCCEEDED);
 
 				expect(await f.stable.balanceOf(f.marketAddr)).to.equal(0n);
 				expect(supply - (await f.stable.totalSupply())).to.equal(E('10000')); // exactly the debt is gone
@@ -769,26 +779,38 @@ describe('BorrowMarketV1', function () {
 				expect(await f.token.balanceOf(f.marketAddr)).to.equal(0n);
 			});
 
-			it('a frozen owner is still paid and cannot block the liquidation', async function () {
+			it('the switch happens at the position price', async function () {
+				// 1x is reached after ~68.4% of the duration: slightly before it is averted, slightly after it succeeded
+				const before = await loadFixture(fixtureWithChallenge);
+				await time.setNextBlockTimestamp(before.start + (DURATION * 68n) / 100n);
+				await expect(before.market.connect(before.bidder).bid(before.challengeId, ONE)).to.emit(before.market, 'ChallengeAverted');
+
+				const after = await loadFixture(fixtureWithChallenge);
+				await time.setNextBlockTimestamp(after.start + (DURATION * 69n) / 100n);
+				await expect(after.market.connect(after.bidder).bid(after.challengeId, ONE)).to.emit(after.market, 'ChallengeSucceeded');
+			});
+
+			it('a frozen owner cannot block the liquidation, the owner gets nothing anyway', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
 				await f.stable.connect(f.curator).setFreeze(f.user.address, 'frozen');
 				const ownerStable = await f.stable.balanceOf(f.user.address);
 
-				await time.setNextBlockTimestamp(f.start + PHASE + half);
+				await time.setNextBlockTimestamp(f.start + elapsed);
 				await f.market.connect(f.bidder).bid(f.challengeId, ONE);
-				expect((await f.stable.balanceOf(f.user.address)) - ownerStable).to.be.gt(0n);
+				expect(await f.stable.balanceOf(f.user.address)).to.equal(ownerStable);
+				expect((await f.market.getPosition(f.positionId)).balance).to.equal(0n);
 			});
 
 			it('writes off a shortfall as bad debt when the auction price is too low', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
-				const elapsed = (PHASE * 9n) / 10n; // price is 10% of the position price
-				const offer = auctionOffer(elapsed, ONE);
-				const reward = (offer * REWARD) / ONE;
-				const funds = offer - reward;
+				const late = (DURATION * 9n) / 10n; // price is 0.1x the position price
+				const offer = curve(late);
+				expect(offer).to.equal(E('2000'));
+				const funds = offer - reward(offer);
 				const shortfall = E('8000') - funds;
 
 				const supply = await f.stable.totalSupply();
-				await time.setNextBlockTimestamp(f.start + PHASE + elapsed);
+				await time.setNextBlockTimestamp(f.start + late);
 				await expect(f.market.connect(f.bidder).bid(f.challengeId, ONE)).to.emit(f.market, 'BadDebt').withArgs(1, shortfall, shortfall);
 
 				expect((await f.market.getMarket(1)).badDebt).to.equal(shortfall);
@@ -802,7 +824,7 @@ describe('BorrowMarketV1', function () {
 
 			it('coverBadDebt burns stablecoin against it and frees the capacity again', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
-				await time.setNextBlockTimestamp(f.start + 2n * PHASE); // price is 0
+				await time.setNextBlockTimestamp(f.start + DURATION); // price is 0
 				await f.market.connect(f.bidder).bid(f.challengeId, ONE);
 
 				const bad = (await f.market.getMarket(1)).badDebt;
@@ -821,7 +843,7 @@ describe('BorrowMarketV1', function () {
 
 			it('partial bids settle the proportional debt', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
-				await time.setNextBlockTimestamp(f.start + PHASE + half);
+				await time.setNextBlockTimestamp(f.start + elapsed);
 				await f.market.connect(f.bidder).bid(f.challengeId, (ONE * 4n) / 10n);
 
 				const p = await f.market.getPosition(f.positionId);
@@ -829,23 +851,14 @@ describe('BorrowMarketV1', function () {
 				expect(p.borrowed).to.equal(E('6000'));
 				expect(p.reserve).to.equal(E('1200'));
 				expect(p.challenged).to.equal((ONE * 6n) / 10n);
-				expect((await f.market.challenges(f.challengeId)).collateralSize).to.equal((ONE * 6n) / 10n);
+				expect((await f.market.getChallenge(f.challengeId)).collateralSize).to.equal((ONE * 6n) / 10n);
 			});
 
-			it('a challenge can only be bid on once it is over', async function () {
+			it('a challenge is gone once it is fully bid on', async function () {
 				const f = await loadFixture(fixtureWithChallenge);
-				await time.increaseTo(f.start + PHASE + half);
+				await time.increaseTo(f.start + elapsed);
 				await f.market.connect(f.bidder).bid(f.challengeId, ONE);
 				await expect(f.market.connect(f.bidder).bid(f.challengeId, ONE)).to.be.revertedWithCustomError(f.market, 'InvalidChallenge');
-			});
-
-			it('the new owner receives the excess after a transfer', async function () {
-				const f = await loadFixture(fixtureWithChallenge);
-				await f.market.connect(f.user).transferFrom(f.user.address, f.other.address, f.positionId);
-				const before = await f.stable.balanceOf(f.other.address);
-				await time.setNextBlockTimestamp(f.start + PHASE + half);
-				await f.market.connect(f.bidder).bid(f.challengeId, ONE);
-				expect((await f.stable.balanceOf(f.other.address)) - before).to.be.gt(0n);
 			});
 		});
 
@@ -855,18 +868,18 @@ describe('BorrowMarketV1', function () {
 			await expect(f.market.connect(f.bidder).bid(f.challengeId, 0)).to.be.revertedWithCustomError(f.market, 'ChallengeTooSmall');
 		});
 
-		it('exposes the auction price', async function () {
+		it('exposes the auction price: 10x at the start, falling to 0 at the end of the duration', async function () {
 			const f = await loadFixture(fixtureWithChallenge);
-			expect(await f.market.auctionPrice(f.challengeId)).to.equal(PRICE); // first phase: full price
+			expect(await f.market.auctionPrice(f.challengeId)).to.be.gt(E('199000')); // right after the start: ~10x
+			await time.increaseTo(f.start + DURATION / 2n);
+			expect(await f.market.auctionPrice(f.challengeId)).to.be.closeTo(E('50000'), E('1'));
 			expect(await f.market.auctionPrice(77)).to.equal(0n);
-			await time.increaseTo(f.start + 2n * PHASE);
+			await time.increaseTo(f.start + DURATION);
 			expect(await f.market.auctionPrice(f.challengeId)).to.equal(0n);
 		});
 	});
 
 	describe('Expired positions', function () {
-		const half = PHASE / 2n;
-
 		async function matured() {
 			const f = await fixtureWithDebt();
 			const p = await f.market.getPosition(f.positionId);
@@ -885,32 +898,36 @@ describe('BorrowMarketV1', function () {
 			await expect(f.market.connect(f.bidder).buyExpired(f.positionId, ONE)).to.be.revertedWithCustomError(f.market, 'Challenged');
 		});
 
-		it('starts at 10x, falls to 1x within one phase and to 0 within two', async function () {
+		it('uses the same curve: 10x at maturity, falling to 0 at the end of the duration', async function () {
 			const f = await loadFixture(matured);
-			expect(await f.market.expiredPrice(f.positionId)).to.equal(10n * PRICE);
-			await time.increaseTo(f.maturity + PHASE);
-			expect(await f.market.expiredPrice(f.positionId)).to.equal(PRICE);
-			await time.increaseTo(f.maturity + 2n * PHASE);
+			await time.increaseTo(f.maturity);
+			expect(await f.market.expiredPrice(f.positionId)).to.be.closeTo(10n * PRICE, E('10'));
+			await time.increaseTo(f.maturity + DURATION / 2n);
+			expect(await f.market.expiredPrice(f.positionId)).to.be.closeTo(E('50000'), E('1'));
+			await time.increaseTo(f.maturity + DURATION);
 			expect(await f.market.expiredPrice(f.positionId)).to.equal(0n);
 		});
 
-		it('pays the debt and the excess to the owner in the first phase', async function () {
+		it('at or above the position price the curator gets the expiry fee on top of its profit share', async function () {
 			const f = await loadFixture(matured);
-			const priceNow = PRICE + (((9n * PRICE) / PHASE) * (PHASE - half));
+			const elapsed = DURATION / 2n;
+			const price = curve(elapsed);
+			const fee = reward(price);
+			const funds = price - fee;
+			const excess = funds - E('8000');
+			const profit = (excess * RESERVE) / ONE;
 			const supply = await f.stable.totalSupply();
 			const ownerBefore = await f.stable.balanceOf(f.user.address);
 			const curatorBefore = await f.stable.balanceOf(f.curator.address);
 			const tokenBefore = await f.token.balanceOf(f.bidder.address);
 
-			await time.setNextBlockTimestamp(f.maturity + half);
+			await time.setNextBlockTimestamp(f.maturity + elapsed);
 			await expect(f.market.connect(f.bidder).buyExpired(f.positionId, ONE * 5n))
-				.to.emit(f.market, 'ForcedSale')
-				.withArgs(f.positionId, ONE, priceNow);
+				.to.emit(f.market, 'ExpiredBought')
+				.withArgs(f.positionId, ONE, price);
 
-			const excess = priceNow - E('8000');
-			const profit = (excess * RESERVE) / ONE;
 			expect((await f.stable.balanceOf(f.user.address)) - ownerBefore).to.equal(excess - profit);
-			expect((await f.stable.balanceOf(f.curator.address)) - curatorBefore).to.equal(profit);
+			expect((await f.stable.balanceOf(f.curator.address)) - curatorBefore).to.equal(fee + profit);
 			expect((await f.token.balanceOf(f.bidder.address)) - tokenBefore).to.equal(ONE);
 			expect(supply - (await f.stable.totalSupply())).to.equal(E('10000'));
 
@@ -920,23 +937,111 @@ describe('BorrowMarketV1', function () {
 			expect((await f.market.getMarket(1)).borrowed).to.equal(0n);
 		});
 
-		it('writes off bad debt in the second phase, when the price is below the debt', async function () {
+		it('below the position price there is no fee, the debt is cleared and the owner forfeits what is left', async function () {
 			const f = await loadFixture(matured);
-			await time.setNextBlockTimestamp(f.maturity + PHASE + (PHASE * 9n) / 10n);
+			const elapsed = (DURATION * 3n) / 4n; // 0.625x the position price
+			const price = curve(elapsed);
+			const excess = price - E('8000');
+			const ownerBefore = await f.stable.balanceOf(f.user.address);
+			const curatorBefore = await f.stable.balanceOf(f.curator.address);
+
+			await time.setNextBlockTimestamp(f.maturity + elapsed);
 			await f.market.connect(f.bidder).buyExpired(f.positionId, ONE);
-			expect((await f.market.getMarket(1)).badDebt).to.be.gt(0n);
+
+			expect((await f.stable.balanceOf(f.curator.address)) - curatorBefore).to.equal(excess);
+			expect(await f.stable.balanceOf(f.user.address)).to.equal(ownerBefore);
+			expect((await f.market.getMarket(1)).badDebt).to.equal(0n);
 		});
 
-		it('is free once both phases have passed, leaving only the reserve to cover the debt', async function () {
+		it('writes off bad debt when the price is below the debt, without any fee', async function () {
 			const f = await loadFixture(matured);
-			await time.setNextBlockTimestamp(f.maturity + 2n * PHASE);
+			const elapsed = (DURATION * 9n) / 10n; // 0.1x the position price
+			const price = curve(elapsed);
+			const curatorBefore = await f.stable.balanceOf(f.curator.address);
+
+			await time.setNextBlockTimestamp(f.maturity + elapsed);
+			await f.market.connect(f.bidder).buyExpired(f.positionId, ONE);
+
+			expect((await f.market.getMarket(1)).badDebt).to.equal(E('8000') - price);
+			expect(await f.stable.balanceOf(f.curator.address)).to.equal(curatorBefore);
+		});
+
+		it('is free once the duration has passed, leaving only the reserve to cover the debt', async function () {
+			const f = await loadFixture(matured);
+			await time.setNextBlockTimestamp(f.maturity + DURATION);
 			await f.market.connect(f.bidder).buyExpired(f.positionId, ONE);
 			expect((await f.market.getMarket(1)).badDebt).to.equal(E('8000'));
 		});
 
+		describe('curator proceeds cover bad debt first', function () {
+			// position 1 is sold for free (8000 bad debt), then position 2 is opened and sold with an excess
+			async function withBadDebt() {
+				const f = await fixtureWithDebt();
+				await time.increase(10n * DAY);
+				const second = await open(f, E('10000'));
+				const m1 = (await f.market.getPosition(f.positionId)).maturity;
+				await time.setNextBlockTimestamp(m1 + DURATION);
+				await f.market.connect(f.bidder).buyExpired(f.positionId, ONE);
+				expect((await f.market.getMarket(1)).badDebt).to.equal(E('8000'));
+				return { ...f, second: second.positionId, maturity: second.maturity };
+			}
+
+			it('what the owner forfeits reduces the bad debt, nothing is left for the curator', async function () {
+				const f = await loadFixture(withBadDebt);
+				const elapsed = (DURATION * 3n) / 4n; // no fee, the whole excess of 4500 is forfeited
+				const profit = curve(elapsed) - E('8000');
+				expect(profit).to.equal(E('4500'));
+				const curatorBefore = await f.stable.balanceOf(f.curator.address);
+				const supply = await f.stable.totalSupply();
+
+				await time.setNextBlockTimestamp(f.maturity + elapsed);
+				await expect(f.market.connect(f.bidder).buyExpired(f.second, ONE)).to.emit(f.market, 'BadDebt').withArgs(1, 0, E('3500'));
+
+				const m = await f.market.getMarket(1);
+				expect(m.badDebt).to.equal(E('3500'));
+				expect(m.borrowed).to.equal(E('3500')); // capacity is freed with every repaid unit
+				expect(await f.stable.balanceOf(f.curator.address)).to.equal(curatorBefore);
+				expect(supply - (await f.stable.totalSupply())).to.equal(E('10000') + profit);
+				expect(await f.stable.balanceOf(f.marketAddr)).to.equal(0n);
+			});
+
+			it('the expiry fee and the profit share clear the bad debt, the curator gets the rest', async function () {
+				const f = await loadFixture(withBadDebt);
+				const elapsed = DURATION / 2n; // fee = 2000, profit = 8000
+				const price = curve(elapsed);
+				const fee = reward(price);
+				const profit = ((price - fee - E('8000')) * RESERVE) / ONE;
+				expect(fee + profit).to.equal(E('10000'));
+				const curatorBefore = await f.stable.balanceOf(f.curator.address);
+
+				await time.setNextBlockTimestamp(f.maturity + elapsed);
+				await f.market.connect(f.bidder).buyExpired(f.second, ONE);
+
+				const m = await f.market.getMarket(1);
+				expect(m.badDebt).to.equal(0n);
+				expect(m.borrowed).to.equal(0n);
+				expect((await f.stable.balanceOf(f.curator.address)) - curatorBefore).to.equal(E('10000') - E('8000'));
+			});
+
+			it('also applies to succeeded challenges', async function () {
+				const f = await loadFixture(withBadDebt);
+				await f.market.connect(f.challenger).challenge(f.second, ONE, 0);
+				const ch = await f.market.getChallenge(0);
+				const elapsed = (DURATION * 3n) / 4n;
+				const profit = curve(elapsed) - reward(curve(elapsed)) - E('8000'); // the whole excess
+				const curatorBefore = await f.stable.balanceOf(f.curator.address);
+
+				await time.setNextBlockTimestamp(ch.startTime + elapsed);
+				await f.market.connect(f.bidder).bid(0, ONE);
+
+				expect((await f.market.getMarket(1)).badDebt).to.equal(E('8000') - profit);
+				expect(await f.stable.balanceOf(f.curator.address)).to.equal(curatorBefore);
+			});
+		});
+
 		it('supports partial purchases and returns 0 for an empty one', async function () {
 			const f = await loadFixture(matured);
-			await time.increaseTo(f.maturity + half);
+			await time.increaseTo(f.maturity + DURATION / 2n);
 			await f.market.connect(f.bidder).buyExpired(f.positionId, ONE / 2n);
 			const p = await f.market.getPosition(f.positionId);
 			expect(p.balance).to.equal(ONE / 2n);

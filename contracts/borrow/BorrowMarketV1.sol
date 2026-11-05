@@ -6,6 +6,7 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {IERC20Metadata} from '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
+import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
 
 import {IStablecoinModifier, IStablecoinMetadata} from '../stablecoin/IStablecoinModifier.sol';
 import {ErrorsLib} from '../stablecoin/libraries/ErrorsLib.sol';
@@ -28,43 +29,44 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 
 	uint256 internal constant ONE = 1 ether;
 
-	/// @notice Reserve bounds per market. The upper bound stays below 100% since repayment divides by (1 - reserve).
+	/// @notice Reserve bounds per market. Above 50% the effective LTV (price - reserve - upfront fee) is too small to be useful.
 	uint256 public constant MIN_RESERVE = 0.1 ether;
-	uint256 public constant MAX_RESERVE = 0.9 ether;
+	uint256 public constant MAX_RESERVE = 0.5 ether;
 
-	/// @notice Bounds of one challenge phase.
-	uint64 public constant MIN_CHALLENGE = 1 days;
-	uint64 public constant MAX_CHALLENGE = 30 days;
+	/// @notice Bounds of the auction duration.
+	uint64 public constant MIN_AUCTION = 1 days;
+	uint64 public constant MAX_AUCTION = 30 days;
 
-	/// @notice Challenger reward, relative to the winning bid.
-	uint256 public constant CHALLENGER_REWARD = 0.02 ether;
+	/// @notice Share of the market reserve ratio that is paid out of the proceeds of an auction, relative to the winning
+	///         bid. With a 10% reserve and a 20% share it is 2%, a higher reserve pays more. It is the challenger reward
+	///         of a succeeded challenge and the expiry fee of the curator when an expired position is bought.
+	uint256 public constant AUCTION_REWARD_SHARE = 0.2 ether;
 
 	/// @notice A position price can be raised by at most this factor per step.
 	uint256 public constant MAX_PRICE_INCREASE = 2;
 
 	/// @notice Cooldowns, during which minting, withdrawing and price increases are suspended.
 	uint64 public constant COOLDOWN_PRICE_INCREASE = 5 days;
-	uint64 public constant COOLDOWN_CHALLENGE_AVERTED = 1 days;
-	uint64 public constant COOLDOWN_CHALLENGE_SUCCEEDED = 3 days;
+	uint64 public constant COOLDOWN_CHALLENGE_AVERTED = 3 days;
+	uint64 public constant COOLDOWN_CHALLENGE_SUCCEEDED = 5 days;
 
-	/// @notice Start multiple of the forced sale price for matured positions.
-	uint256 public constant EXPIRED_PRICE_FACTOR = 10;
+	/// @notice Every auction starts at this multiple of the position price and falls to 0 within the auction duration.
+	uint256 public constant AUCTION_PRICE_FACTOR = 10;
 
 	// ---------------------------------------------------------------------------------------
 
 	uint256 public marketCount;
 	uint256 public positionCount;
+	uint256 public challengeCount;
 
 	mapping(uint256 marketId => Market) internal _markets;
 	mapping(uint256 marketId => PendingMarket) internal _pendingMarkets;
 	mapping(uint256 positionId => Position) internal _positions;
+	mapping(uint256 challengeId => Challenge) internal _challenges;
 
 	/// @dev Operator approvals are scoped to the current owner: the epoch is bumped on every transfer.
 	mapping(uint256 positionId => uint256) internal _epoch;
 	mapping(uint256 positionId => mapping(uint256 epoch => mapping(address operator => bool))) internal _authorized;
-
-	uint256 public challengeCount;
-	mapping(uint256 challengeId => Challenge) public challenges;
 
 	// ---------------------------------------------------------------------------------------
 
@@ -82,12 +84,13 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 	// ---------------------------------------------------------------------------------------
 	// markets
 
-	/// @notice Curator proposes a new market. Becomes acceptable after stable.timelock(). Never overrides, 	///         market gets its own id.
+	/// @notice Curator proposes a new market. Becomes acceptable after stable.timelock(). Never overrides, every
+	///         market gets its own id.
 	function proposeMarket(MarketParams calldata p) external onlyCurator returns (uint256 marketId) {
 		if (p.collateral == address(0) || p.collateral == address(stable)) revert InvalidMarket();
 		if (IERC20Metadata(p.collateral).decimals() > 24) revert InvalidMarket(); // leaves 12 digits for price
 		if (p.maturity <= block.timestamp) revert InvalidMaturity();
-		if (p.challengePhase < MIN_CHALLENGE || p.challengePhase > MAX_CHALLENGE) revert InvalidMarket();
+		if (p.auction < MIN_AUCTION || p.auction > MAX_AUCTION) revert InvalidMarket();
 		if (p.reserve < MIN_RESERVE || p.reserve > MAX_RESERVE) revert InvalidMarket();
 		if (p.minBalance == 0 || p.price == 0 || p.limit == 0 || p.rate > ONE) revert InvalidMarket();
 		if (p.minBalance * p.price > p.limit * ONE) revert InvalidMarket(); // a min position must fit the limit
@@ -98,7 +101,7 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 			marketId: marketId,
 			collateral: p.collateral,
 			maturity: p.maturity,
-			challengePhase: p.challengePhase,
+			auction: p.auction,
 			minBalance: p.minBalance,
 			price: p.price,
 			reserve: p.reserve,
@@ -255,9 +258,10 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 	// ---------------------------------------------------------------------------------------
 	// challenges
 
-	/// @notice Starts a challenge: the caller deposits `size` collateral to put up for auction against the position's
-	///         collateral. For the first phase anyone can avert it by buying the challenger's collateral at the
-	///         position price, in the second phase the price falls to 0 and the position's collateral is sold.
+	/// @notice Starts a challenge: the caller deposits `size` collateral, which stays locked until the auction has
+	///         sold it or the position's collateral. The auction starts at 10x the position price and falls to 0 within
+	///         the market's auction duration. At or above the position price `bid` buys the challenger's collateral
+	///         (the challenge is averted), below it `bid` buys the position's collateral (the challenge succeeded).
 	/// @param minimumPrice protects the challenger against the owner lowering the price in the same block
 	function challenge(uint256 positionId, uint256 size, uint256 minimumPrice) external nonReentrant returns (uint256 challengeId) {
 		Position storage p = _position(positionId);
@@ -272,75 +276,76 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 		p.challenged += size;
 
 		challengeId = challengeCount++;
-		challenges[challengeId] = Challenge(_msgSender(), uint64(block.timestamp), positionId, size);
+		_challenges[challengeId] = Challenge(_msgSender(), uint64(block.timestamp), positionId, size);
 		emit ChallengeStarted(_msgSender(), positionId, size, challengeId);
 	}
 
-	/// @notice Bids on a challenge. In the first phase it averts the challenge (pays the challenger the position
-	///         price, gets the challenger's collateral), afterwards it buys the position's collateral at the falling
-	///         auction price and the challenger gets their collateral back plus a reward.
+	/// @notice Bids on a challenge at the current auction price. At or above the position price it averts the
+	///         challenge: the bidder pays the challenger and receives the challenger's collateral. Below the position
+	///         price the challenge succeeded: the bidder buys the position's collateral, and the challenger gets their
+	///         collateral back plus a reward.
 	/// @param size collateral to bid for, reduced to what is left of the challenge
 	function bid(uint256 challengeId, uint256 size) external nonReentrant {
-		Challenge memory ch = challenges[challengeId];
+		Challenge memory ch = _challenges[challengeId];
 		if (ch.challenger == address(0)) revert InvalidChallenge();
 		Position storage p = _positions[ch.positionId];
 		Market storage m = _markets[p.marketId];
 		size = size < ch.collateralSize ? size : ch.collateralSize;
 		if (size == 0) revert ChallengeTooSmall();
 
+		uint256 price = _auctionPrice(ch.startTime, m.auction, p.price);
 		_shrinkChallenge(challengeId, ch, size);
 		p.challenged -= size;
 
-		if (block.timestamp <= ch.startTime + m.challengePhase) {
-			_avert(challengeId, ch, p, m, size);
+		if (price >= p.price) {
+			_avert(challengeId, ch, p, m, size, price);
 		} else {
-			_succeed(challengeId, ch, p, m, size);
+			_succeed(challengeId, ch, p, m, size, price);
 		}
 	}
 
-	function _avert(uint256 challengeId, Challenge memory ch, Position storage p, Market storage m, uint256 size) internal {
-		if (block.timestamp == ch.startTime) revert SameBlock(); // no atomic challenge and avert
-		if (_msgSender() != ch.challenger) {
-			stable.transferFrom(_msgSender(), ch.challenger, (size * p.price) / ONE);
-		} // the challenger can cancel for free
+	function _avert(uint256 challengeId, Challenge memory ch, Position storage p, Market storage m, uint256 size, uint256 price) internal {
+		stable.transferFrom(_msgSender(), ch.challenger, (size * price) / ONE);
 
 		_restrict(p, COOLDOWN_CHALLENGE_AVERTED);
 		IERC20(m.collateral).safeTransfer(_msgSender(), size);
 		emit ChallengeAverted(ch.positionId, challengeId, size);
 	}
 
-	function _succeed(uint256 challengeId, Challenge memory ch, Position storage p, Market storage m, uint256 size) internal {
-		uint256 offer = (_auctionPrice(ch.startTime + m.challengePhase, m.challengePhase, p.price) * size) / ONE;
-		stable.transferFrom(_msgSender(), address(this), offer);
-
-		uint256 reward = (offer * CHALLENGER_REWARD) / ONE;
-		_pay(ch.challenger, reward);
-
+	function _succeed(
+		uint256 challengeId,
+		Challenge memory ch,
+		Position storage p,
+		Market storage m,
+		uint256 size,
+		uint256 price
+	) internal {
+		uint256 offer = (price * size) / ONE;
 		_restrict(p, COOLDOWN_CHALLENGE_SUCCEEDED); // time for further challenges before the owner can mint again
-		_settle(ch.positionId, p, m, size, offer - reward);
+		_sell(ch.positionId, p, m, size, offer, ch.challenger, _reward(offer, m), true);
 
 		IERC20(m.collateral).safeTransfer(ch.challenger, size);
-		IERC20(m.collateral).safeTransfer(_msgSender(), size);
 		emit ChallengeSucceeded(ch.positionId, challengeId, offer, size);
 	}
 
-	/// @notice Buys up to `upTo` collateral of a matured position at the forced sale price, which starts at 10x the
-	///         position price at maturity and falls to 0 within two challenge phases.
+	/// @notice Buys up to `upTo` collateral of an expired position. The auction starts at maturity at 10x the position
+	///         price and falls to 0 within the market's auction duration. At or above the position price the curator
+	///         receives the expiry fee out of the proceeds. Below it the proceeds go to the debt first and the owner
+	///         forfeits whatever is left: all of it goes to the curator (covering the market's bad debt first).
 	function buyExpired(uint256 positionId, uint256 upTo) external nonReentrant returns (uint256 amount) {
 		Position storage p = _position(positionId);
 		Market storage m = _markets[p.marketId];
 		if (block.timestamp < p.maturity) revert NotExpired();
 		if (p.challenged > 0) revert Challenged(); // otherwise the owner could front-run challenges with a sale
 
-		uint256 price = _expiredPrice(p, m);
+		uint256 price = _auctionPrice(p.maturity, m.auction, p.price);
 		amount = upTo < p.balance ? upTo : p.balance;
 		if (amount == 0) return 0;
 
-		uint256 cost = (price * amount) / ONE;
-		stable.transferFrom(_msgSender(), address(this), cost);
-		_settle(positionId, p, m, amount, cost);
-		IERC20(m.collateral).safeTransfer(_msgSender(), amount);
-		emit ForcedSale(positionId, amount, price);
+		uint256 offer = (price * amount) / ONE;
+		bool below = price < p.price;
+		_sell(positionId, p, m, amount, offer, stable.curator(), below ? 0 : _reward(offer, m), below);
+		emit ExpiredBought(positionId, amount, price);
 	}
 
 	/// @notice Burns the caller's stablecoin against the market's bad debt and frees the capacity again.
@@ -359,6 +364,10 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 
 	function getMarket(uint256 marketId) external view returns (Market memory) {
 		return _markets[marketId];
+	}
+
+	function getChallenge(uint256 challengeId) external view returns (Challenge memory) {
+		return _challenges[challengeId];
 	}
 
 	function getPendingMarket(uint256 marketId) external view returns (PendingMarket memory) {
@@ -382,16 +391,16 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 
 	/// @notice Current price per collateral unit for a challenge, (36 - decimals) decimals. 0 if it is gone.
 	function auctionPrice(uint256 challengeId) external view returns (uint256) {
-		Challenge memory ch = challenges[challengeId];
+		Challenge memory ch = _challenges[challengeId];
 		if (ch.challenger == address(0)) return 0;
 		Position storage p = _positions[ch.positionId];
-		uint64 phase = _markets[p.marketId].challengePhase;
-		return _auctionPrice(ch.startTime + phase, phase, p.price);
+		return _auctionPrice(ch.startTime, _markets[p.marketId].auction, p.price);
 	}
 
+	/// @notice Current price per collateral unit for an expired position, (36 - decimals) decimals.
 	function expiredPrice(uint256 positionId) external view returns (uint256) {
 		Position storage p = _position(positionId);
-		return _expiredPrice(p, _markets[p.marketId]);
+		return _auctionPrice(p.maturity, _markets[p.marketId].auction, p.price);
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -453,8 +462,10 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 
 	/// @dev Takes `size` collateral from the position, repays the proportional debt out of `funds` (stablecoin
 	///      already held by this contract) and its reserve, and distributes what is left. Any shortfall is written
-	///      off as bad debt. Used for both successful challenges and forced sales of matured positions.
-	function _settle(uint256 positionId, Position storage p, Market storage m, uint256 size, uint256 funds) internal {
+	///      off as bad debt. Used for both succeeded challenges and expired positions below the position price. With
+	///      `forfeit` the owner gets nothing of the excess, all of it goes to the curator (after the bad debt of the
+	///      market is covered). Without it the reserve ratio of the excess goes to the curator and the rest to the owner.
+	function _settle(uint256 positionId, Position storage p, Market storage m, uint256 size, uint256 funds, bool forfeit) internal {
 		uint256 debt = (p.borrowed * size) / p.balance;
 		uint256 reserve = p.borrowed == 0 ? 0 : (p.reserve * debt) / p.borrowed;
 		uint256 due = debt - reserve; // what the proceeds have to cover, the reserve covers the rest
@@ -476,11 +487,48 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 
 		if (excess > 0) {
 			// like Frankencoin: the reserve ratio of the excess is kept as profit, unless nothing was owed
-			uint256 profit = debt == 0 ? 0 : (excess * m.reserve) / ONE;
-			_pay(stable.curator(), profit);
+			uint256 profit = debt == 0 ? 0 : forfeit ? excess : (excess * m.reserve) / ONE;
+			_payCurator(p.marketId, m, profit);
 			_pay(ownerOf(positionId), excess - profit);
 		}
 		_emitUpdate(p);
+	}
+
+	/// @dev The caller pays `offer` for `size` collateral of the position. `fee` is paid to `feeTo` out of the offer
+	///      first, the rest settles the debt.
+	function _sell(
+		uint256 positionId,
+		Position storage p,
+		Market storage m,
+		uint256 size,
+		uint256 offer,
+		address feeTo,
+		uint256 fee,
+		bool forfeit
+	) internal {
+		stable.transferFrom(_msgSender(), address(this), offer);
+		if (feeTo == stable.curator()) _payCurator(p.marketId, m, fee);
+		else _pay(feeTo, fee);
+		_settle(positionId, p, m, size, offer - fee, forfeit);
+		IERC20(m.collateral).safeTransfer(_msgSender(), size);
+	}
+
+	/// @dev Challenger reward / expiry fee: a share of the reserve ratio, relative to the offer.
+	function _reward(uint256 offer, Market storage m) internal view returns (uint256) {
+		return Math.mulDiv(offer, m.reserve * AUCTION_REWARD_SHARE, ONE * ONE);
+	}
+
+	/// @dev Whatever the curator would receive from an auction first covers the bad debt of the market (which frees its
+	///      capacity again), only the rest is paid out.
+	function _payCurator(uint256 marketId, Market storage m, uint256 amount) internal {
+		uint256 cover = amount < m.badDebt ? amount : m.badDebt;
+		if (cover > 0) {
+			m.badDebt -= cover;
+			m.borrowed -= cover;
+			stable.burnModule(address(this), cover);
+			emit BadDebt(marketId, 0, m.badDebt);
+		}
+		_pay(stable.curator(), amount - cover);
 	}
 
 	function _pay(address to, uint256 amount) internal {
@@ -488,31 +536,19 @@ contract BorrowMarketV1 is ERC721, ReentrancyGuard, IStablecoinModifier, IBorrow
 	}
 
 	function _shrinkChallenge(uint256 challengeId, Challenge memory ch, uint256 size) internal {
-		if (size == ch.collateralSize) delete challenges[challengeId];
-		else challenges[challengeId].collateralSize = ch.collateralSize - size;
+		if (size == ch.collateralSize) delete _challenges[challengeId];
+		else _challenges[challengeId].collateralSize = ch.collateralSize - size;
 	}
 
-	/// @dev Linear fall from `price` at `start` to 0 after `phase`. The auction starts after the first phase.
-	function _auctionPrice(uint256 start, uint256 phase, uint256 price) internal view returns (uint256) {
-		if (block.timestamp <= start) return price;
-		if (block.timestamp >= start + phase) return 0;
-		return (price / phase) * (phase - (block.timestamp - start));
-	}
-
-	/// @dev 10x position price until maturity, falling to 1x within one challenge phase after maturity and to 0
-	///      within another.
-	function _expiredPrice(Position storage p, Market storage m) internal view returns (uint256) {
-		uint256 price = p.price;
-		if (block.timestamp <= p.maturity) return EXPIRED_PRICE_FACTOR * price;
-
-		uint256 phase = m.challengePhase;
-		uint256 passed = block.timestamp - p.maturity;
-		if (passed <= phase) {
-			return price + (((EXPIRED_PRICE_FACTOR - 1) * price) / phase) * (phase - passed);
-		} else if (passed < 2 * phase) {
-			return (price / phase) * (2 * phase - passed);
-		}
-		return 0;
+	/// @dev Quadratic ease-out: 10x the position price at `start`, falling fast at first and ever slower, reaching the
+	///      position price after ~68% of the duration and 0 at the end: price * 10 * (1 - elapsed / duration)^2.
+	function _auctionPrice(uint256 start, uint64 duration, uint256 price) internal view returns (uint256) {
+		uint256 startPrice = AUCTION_PRICE_FACTOR * price;
+		if (block.timestamp <= start) return startPrice;
+		uint256 elapsed = block.timestamp - start;
+		if (elapsed >= duration) return 0;
+		uint256 remaining = duration - elapsed;
+		return Math.mulDiv(Math.mulDiv(startPrice, remaining, duration), remaining, duration);
 	}
 
 	/// @dev Operator approvals lapse with every ownership change.
