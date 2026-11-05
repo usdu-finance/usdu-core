@@ -2,84 +2,86 @@
 pragma solidity ^0.8.20;
 
 /// @title IBorrowMarketV1
-/// @notice Oracle-free, fixed-term borrow market. Every position is an NFT; collateral families ("proposals") are
+/// @notice Oracle-free, fixed-term borrow market. Every position is an NFT; markets are
 ///         whitelisted by the curator behind the stablecoin timelock. Positions are kept honest by Dutch-auction
 ///         challenges (as in Frankencoin v2) instead of a price oracle.
 interface IBorrowMarketV1 {
 	// ---------------------------------------------------------------------------------------
 	// structs
 
-	/// @notice Curator input for a new collateral family.
-	struct CollateralParams {
+	/// @notice Curator input for a new market.
+	struct MarketParams {
 		address collateral; // ERC20, max 24 decimals, must transfer exactly the requested amount
-		uint64 maturity; // latest maturity any position of this family may choose
-		uint64 challenge; // length of one challenge phase (the auction runs for two phases)
+		uint64 maturity; // latest maturity any position of this market may choose
+		uint64 challengePhase; // length of one challenge phase (the auction runs for two phases)
 		uint256 minBalance; // minimum collateral balance of a position, prevents dust
 		uint256 price; // highest position price, (36 - decimals) decimals
 		uint256 reserve; // 1e18 scaled share of every mint that is locked as reserve
-		uint256 limit; // 1e18 scaled, max stablecoin outstanding for this family
+		uint256 limit; // 1e18 scaled, max stablecoin outstanding for this market
 		uint256 rate; // 1e18 scaled annual interest, charged upfront until maturity
 	}
 
-	/// @notice A collateral family. Immutable once accepted, except `available`.
-	struct Collateral {
-		uint256 id;
+	/// @notice A market (one collateral, one set of risk parameters). Immutable once accepted, except `borrowed` and `badDebt`.
+	struct Market {
+		uint256 marketId;
 		address collateral;
 		uint64 maturity;
-		uint64 challenge;
+		uint64 challengePhase;
 		uint256 minBalance;
 		uint256 price;
 		uint256 reserve;
 		uint256 limit;
-		uint256 available; // limit minus the debt currently outstanding in the family
+		uint256 borrowed; // gross debt currently outstanding in the market, counts against the limit
+		uint256 badDebt; // unbacked stablecoin left behind by liquidations that did not cover the debt
 		uint256 rate;
 	}
 
-	struct PendingCollateral {
-		Collateral value;
+	struct PendingMarket {
+		Market value;
 		uint64 validAt;
 	}
 
-	/// @notice `minted` is the gross debt (incl. reserve). The borrower receives minted - reserve - fee.
+	/// @notice `borrowed` includes the reserve. The borrower receives borrowed - reserve - fee.
 	struct Position {
-		uint256 id; // NFT id
-		uint256 proposal; // collateral family id
+		uint256 positionId; // NFT id
+		uint256 marketId; // market id
 		uint64 maturity;
 		uint64 cooldown; // minting, withdrawing and price increases are suspended until this timestamp
 		uint256 balance;
-		uint256 minted;
-		uint256 reserve; // part of `minted` that is held by this contract
-		uint256 price; // starts at the family price, (36 - decimals) decimals
+		uint256 borrowed;
+		uint256 reserve; // part of `borrowed` that is held by this contract
+		uint256 price; // starts at the market price, (36 - decimals) decimals
 		uint256 challenged; // collateral currently under challenge
 	}
 
 	struct Challenge {
 		address challenger;
-		uint64 start;
-		uint256 position;
-		uint256 size; // collateral the challenger deposited
+		uint64 startTime;
+		uint256 positionId;
+		uint256 collateralSize; // collateral the challenger deposited
 	}
 
 	// ---------------------------------------------------------------------------------------
 	// events and errors
 
-	event CollateralProposed(address indexed curator, uint256 indexed id, address indexed collateral, uint256 validAt);
-	event CollateralAccepted(uint256 indexed id);
-	event CollateralRevoked(address indexed account, uint256 indexed id);
+	event MarketProposed(address indexed curator, uint256 indexed marketId, address indexed collateral, uint256 validAt);
+	event MarketAccepted(uint256 indexed marketId);
+	event MarketRevoked(address indexed account, uint256 indexed marketId);
 
-	event PositionOpened(address indexed owner, uint256 indexed id, uint256 indexed proposal);
-	event PositionUpdate(uint256 indexed id, uint256 balance, uint256 price, uint256 minted);
-	event Authorized(uint256 indexed id, address indexed operator, bool allowed);
+	event PositionOpened(address indexed owner, uint256 indexed positionId, uint256 indexed marketId);
+	event PositionUpdate(uint256 indexed positionId, uint256 balance, uint256 price, uint256 borrowed);
+	event Authorized(uint256 indexed positionId, address indexed operator, bool allowed);
 
-	event ChallengeStarted(address indexed challenger, uint256 indexed id, uint256 size, uint256 number);
-	event ChallengeAverted(uint256 indexed id, uint256 number, uint256 size);
-	event ChallengeSucceeded(uint256 indexed id, uint256 number, uint256 bid, uint256 size);
-	event ForcedSale(uint256 indexed id, uint256 amount, uint256 price);
-	event BadDebt(uint256 indexed proposal, uint256 amount, uint256 total);
+	event ChallengeStarted(address indexed challenger, uint256 indexed positionId, uint256 size, uint256 challengeId);
+	event ChallengeAverted(uint256 indexed positionId, uint256 challengeId, uint256 size);
+	event ChallengeSucceeded(uint256 indexed positionId, uint256 challengeId, uint256 bid, uint256 size);
+	event ForcedSale(uint256 indexed positionId, uint256 amount, uint256 price);
+	event BadDebt(uint256 indexed marketId, uint256 amount, uint256 total);
 
-	error InvalidCollateral();
+	error InvalidMarket();
 	error IncompatibleCollateral();
 	error InvalidPosition();
+	error InvalidChallenge();
 	error InvalidMaturity();
 	error NotAuthorized();
 	error InsufficientCollateral(uint256 value, uint256 debt);
@@ -97,54 +99,54 @@ interface IBorrowMarketV1 {
 	error SameBlock();
 
 	// ---------------------------------------------------------------------------------------
-	// collateral families (curator)
+	// markets (curator)
 
-	function proposeCollateral(CollateralParams calldata params) external returns (uint256 id);
+	function proposeMarket(MarketParams calldata params) external returns (uint256 marketId);
 
-	function revokeCollateral(uint256 id) external;
+	function revokeMarket(uint256 marketId) external;
 
-	function acceptCollateral(uint256 id) external;
+	function acceptMarket(uint256 marketId) external;
 
 	// ---------------------------------------------------------------------------------------
 	// positions
 
-	function open(uint256 proposal, uint256 amount, uint64 maturity, uint256 mintAmount, address to) external returns (uint256 id);
+	function open(uint256 marketId, uint256 amount, uint64 maturity, uint256 borrowAmount, address to) external returns (uint256 positionId);
 
-	function deposit(uint256 id, uint256 amount) external;
+	function deposit(uint256 positionId, uint256 amount) external;
 
-	function withdraw(uint256 id, uint256 amount, address to) external;
+	function withdraw(uint256 positionId, uint256 amount, address to) external;
 
-	function mint(uint256 id, uint256 amount, address to) external;
+	function mint(uint256 positionId, uint256 amount, address to) external;
 
-	function repay(uint256 id, uint256 amount) external;
+	function repay(uint256 positionId, uint256 amount) external;
 
-	function setPrice(uint256 id, uint256 newPrice) external;
+	function setPrice(uint256 positionId, uint256 newPrice) external;
 
-	function setAuthorized(uint256 id, address operator, bool allowed) external;
+	function setAuthorized(uint256 positionId, address operator, bool allowed) external;
 
 	// ---------------------------------------------------------------------------------------
 	// challenges and expiry
 
-	function challenge(uint256 id, uint256 size, uint256 minimumPrice) external returns (uint256 number);
+	function challenge(uint256 positionId, uint256 size, uint256 minimumPrice) external returns (uint256 challengeId);
 
-	function bid(uint256 number, uint256 size) external;
+	function bid(uint256 challengeId, uint256 size) external;
 
-	function buyExpired(uint256 id, uint256 upTo) external returns (uint256 amount);
+	function buyExpired(uint256 positionId, uint256 upTo) external returns (uint256 amount);
 
-	function coverBadDebt(uint256 proposal, uint256 amount) external;
+	function coverBadDebt(uint256 marketId, uint256 amount) external;
 
 	// ---------------------------------------------------------------------------------------
 	// views
 
-	function getCollateral(uint256 id) external view returns (Collateral memory);
+	function getMarket(uint256 marketId) external view returns (Market memory);
 
-	function getPosition(uint256 id) external view returns (Position memory);
+	function getPosition(uint256 positionId) external view returns (Position memory);
 
-	function isAuthorized(uint256 id, address operator) external view returns (bool);
+	function isAuthorized(uint256 positionId, address operator) external view returns (bool);
 
-	function feeRate(uint256 proposal, uint64 maturity) external view returns (uint256);
+	function feeRate(uint256 marketId, uint64 maturity) external view returns (uint256);
 
-	function auctionPrice(uint256 number) external view returns (uint256);
+	function auctionPrice(uint256 challengeId) external view returns (uint256);
 
-	function expiredPrice(uint256 id) external view returns (uint256);
+	function expiredPrice(uint256 positionId) external view returns (uint256);
 }
