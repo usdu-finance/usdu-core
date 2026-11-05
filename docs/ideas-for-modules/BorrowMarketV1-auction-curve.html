@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auction Curve</title>
+<style>
+  /* Layout: one chart up top, the formula and a value table beneath, single column. */
+  :root {
+    --bg: #f7f8fa; --fg: #14181f; --muted: #5b6573; --grid: #e1e5ea; --panel: #ffffff;
+    --n2: #1f5fd1; --n3: #c2570a; --limbo: rgba(31,95,209,.07); --ref: #5b6573;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1318; --fg: #e8ebf0; --muted: #9aa4b2; --grid: #262d37; --panel: #161b22;
+      --n2: #6aa3ff; --n3: #f0934f; --limbo: rgba(106,163,255,.09); --ref: #9aa4b2; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1318; --fg: #e8ebf0; --muted: #9aa4b2; --grid: #262d37; --panel: #161b22;
+    --n2: #6aa3ff; --n3: #f0934f; --limbo: rgba(106,163,255,.09); --ref: #9aa4b2; color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding-block: 28px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+  p { margin: 0; color: var(--muted); max-width: 65ch; }
+  code, .mono { font-family: var(--mono); font-size: 13px; }
+  .panel { background: var(--panel); border: 1px solid var(--grid); border-radius: 8px; padding: 16px; min-width: 0; }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; margin-bottom: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { width: 18px; height: 0; border-top: 3px solid; }
+  .sw.dash { border-top-style: dashed; }
+  .chart { position: relative; }
+  svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+  svg text { fill: var(--muted); font: 11px var(--mono); }
+  svg .lbl2 { fill: var(--n2); font-weight: 600; } svg .lbl3 { fill: var(--n3); font-weight: 600; }
+  #tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--grid);
+    border-radius: 6px; padding: 8px 10px; font: 12px var(--mono); color: var(--fg); display: none; white-space: nowrap; }
+  #tip b { font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; }
+  pre { margin: 0; overflow-x: auto; font: 13px/1.5 var(--mono); color: var(--fg); }
+  h2 { font-size: 14px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<main>
+  <div>
+    <h1>Auction price curve</h1>
+    <p>One curve for challenges and forced sales: it starts at 10x the position price and ends at 0 at time T. The shaded band below the dashed line is the 1x level, where the sale clears under the position price.</p>
+  </div>
+
+  <div class="panel">
+    <div class="legend">
+      <span><i class="sw" style="border-color: var(--n2)"></i>n = 2 (recommended)</span>
+      <span><i class="sw dash" style="border-color: var(--n3)"></i>n = 3</span>
+    </div>
+    <div class="chart" id="chart">
+      <svg id="svg" viewBox="0 0 640 360" role="img" aria-label="Auction price as a multiple of the position price, against the share of the auction time elapsed. n=2 falls from 10x to 1x at 68 percent of the time, n=3 at 54 percent."></svg>
+      <div id="tip"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Formula</h2>
+<pre>price(t) = 10 x positionPrice x (1 - t/T)^n
+
+remaining = T - elapsed
+price = mulDiv(mulDiv(start, remaining, T), remaining, T)</pre>
+  </div>
+
+  <div class="panel">
+    <h2>Price as a multiple of the position price</h2>
+    <div class="scroll"><table id="tbl"></table></div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var W = 640, H = 360, L = 44, R = 20, T = 14, B = 38;
+  var pw = W - L - R, ph = H - T - B, YMAX = 10;
+  var svg = document.getElementById('svg');
+  function X(f) { return L + f * pw; }
+  function Y(v) { return T + ph - (v / YMAX) * ph; }
+  function price(f, n) { return YMAX * Math.pow(1 - f, n); }
+  function el(tag, attrs, txt) {
+    var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (txt != null) e.textContent = txt;
+    svg.appendChild(e); return e;
+  }
+  // limbo band: below 1x
+  el('rect', { x: L, y: Y(1), width: pw, height: Y(0) - Y(1), fill: 'var(--limbo)' });
+  // grid + y labels
+  [0, 2, 4, 6, 8, 10].forEach(function (v) {
+    el('line', { x1: L, x2: L + pw, y1: Y(v), y2: Y(v), stroke: 'var(--grid)', 'stroke-width': 1 });
+    el('text', { x: L - 8, y: Y(v) + 4, 'text-anchor': 'end' }, v + 'x');
+  });
+  // x labels
+  [0, 25, 50, 75, 100].forEach(function (p) {
+    el('text', { x: X(p / 100), y: H - 18, 'text-anchor': 'middle' }, p + '%');
+  });
+  el('text', { x: L + pw / 2, y: H - 3, 'text-anchor': 'middle' }, 'share of auction time T elapsed');
+  // 1x reference
+  el('line', { x1: L, x2: L + pw, y1: Y(1), y2: Y(1), stroke: 'var(--ref)', 'stroke-width': 1.5, 'stroke-dasharray': '5 4' });
+  el('text', { x: L + pw - 4, y: Y(1) - 6, 'text-anchor': 'end' }, '1x = position price');
+  el('text', { x: L + pw - 4, y: Y(0) - 8, 'text-anchor': 'end' }, 'limbo: cleared under the position price');
+  // curves
+  function path(n) {
+    var d = '';
+    for (var i = 0; i <= 200; i++) { var f = i / 200; d += (i ? 'L' : 'M') + X(f).toFixed(1) + ' ' + Y(price(f, n)).toFixed(1); }
+    return d;
+  }
+  el('path', { d: path(3), fill: 'none', stroke: 'var(--n3)', 'stroke-width': 2, 'stroke-dasharray': '6 4', 'stroke-linecap': 'round' });
+  el('path', { d: path(2), fill: 'none', stroke: 'var(--n2)', 'stroke-width': 2.5, 'stroke-linecap': 'round' });
+  // crossing markers (price = 1x)
+  var c2 = 1 - Math.pow(10, -1 / 2), c3 = 1 - Math.pow(10, -1 / 3);
+  el('circle', { cx: X(c3), cy: Y(1), r: 4.5, fill: 'var(--n3)', stroke: 'var(--panel)', 'stroke-width': 2 });
+  el('circle', { cx: X(c2), cy: Y(1), r: 4.5, fill: 'var(--n2)', stroke: 'var(--panel)', 'stroke-width': 2 });
+  el('text', { x: X(c3) - 8, y: Y(1) - 10, 'text-anchor': 'end', class: 'lbl3' }, 'n=3 hits 1x at ' + (c3 * 100).toFixed(0) + '%');
+  el('text', { x: X(c2) + 2, y: Y(1) - 28, 'text-anchor': 'middle', class: 'lbl2' }, 'n=2 hits 1x at ' + (c2 * 100).toFixed(0) + '%');
+  // direct labels at the start
+  el('text', { x: X(0.02), y: Y(10) + 14, class: 'lbl2' }, '10x start');
+
+  // hover layer
+  var vline = el('line', { y1: T, y2: T + ph, stroke: 'var(--muted)', 'stroke-width': 1, visibility: 'hidden' });
+  var d2 = el('circle', { r: 4.5, fill: 'var(--n2)', stroke: 'var(--panel)', 'stroke-width': 2, visibility: 'hidden' });
+  var d3 = el('circle', { r: 4.5, fill: 'var(--n3)', stroke: 'var(--panel)', 'stroke-width': 2, visibility: 'hidden' });
+  var hit = el('rect', { x: L, y: T, width: pw, height: ph, fill: 'transparent' });
+  var tip = document.getElementById('tip'), chart = document.getElementById('chart');
+  function move(ev) {
+    var r = svg.getBoundingClientRect();
+    var f = ((ev.clientX - r.left) / r.width * W - L) / pw;
+    f = Math.max(0, Math.min(1, f));
+    var p2 = price(f, 2), p3 = price(f, 3);
+    vline.setAttribute('x1', X(f)); vline.setAttribute('x2', X(f)); vline.setAttribute('visibility', 'visible');
+    d2.setAttribute('cx', X(f)); d2.setAttribute('cy', Y(p2)); d2.setAttribute('visibility', 'visible');
+    d3.setAttribute('cx', X(f)); d3.setAttribute('cy', Y(p3)); d3.setAttribute('visibility', 'visible');
+    tip.innerHTML = (f * 100).toFixed(0) + '% of T<br><b style="color:var(--n2)">n=2</b> ' + p2.toFixed(2) + 'x<br><b style="color:var(--n3)">n=3</b> ' + p3.toFixed(2) + 'x';
+    tip.style.display = 'block';
+    var px = X(f) / W * r.width, tw = tip.offsetWidth;
+    tip.style.left = Math.min(Math.max(px + 12, 0), r.width - tw) + 'px';
+    tip.style.top = '8px';
+  }
+  function leave() { [vline, d2, d3].forEach(function (e) { e.setAttribute('visibility', 'hidden'); }); tip.style.display = 'none'; }
+  hit.addEventListener('pointermove', move);
+  hit.addEventListener('pointerdown', move);
+  hit.addEventListener('pointerleave', leave);
+
+  // table view
+  var rows = [0, 10, 25, 50, 68.4, 80, 90, 100];
+  var h = '<tr><th>time elapsed</th><th>n = 2</th><th>n = 3</th></tr>';
+  rows.forEach(function (p) {
+    var f = p / 100;
+    h += '<tr><td>' + (p % 1 ? p.toFixed(1) : p) + '%</td><td>' + price(f, 2).toFixed(2) + 'x</td><td>' + price(f, 3).toFixed(2) + 'x</td></tr>';
+  });
+  document.getElementById('tbl').innerHTML = h;
+})();
+</script>
+</body>
+</html>
