@@ -44,7 +44,7 @@ Since the original audit, both files were renamed (`SwapBridgeMorpho.sol` → `c
 
 That means the *entire* `swapOut`/`swapOutTo` call reverts after expiry, even though burning the caller's stablecoin (`stable.burnModule`, gated only by `onlyModule`, not `validModule`) and withdrawing from the vault don't themselves require minting rights. The only reason the redemption path fails is the incidental fee-mint step.
 
-This directly conflicts with the module-expiry design documented in `docs/deprecated-modules/Deprecated Modules.md`, which explicitly relies on modules staying redeemable after expiry ("redeem/reconcile this position down before or as part of expiry"). Every module in this system is designed to expire eventually (`README.md`: "No permanent modules"), so this isn't a rare edge case — it will be hit by every deployment of this contract that accrues any outstanding `totalMinted`.
+This directly conflicts with the module-expiry design documented in `docs/retired-modules/Retired Modules.md`, which explicitly relies on modules staying redeemable after expiry ("redeem/reconcile this position down before or as part of expiry"). Every module in this system is designed to expire eventually (`README.md`: "No permanent modules"), so this isn't a rare edge case — it will be hit by every deployment of this contract that accrues any outstanding `totalMinted`.
 
 **Impact:** Once a `SwapBridgeMorpho` instance expires, any holder of the stablecoin it minted loses the ability to redeem it via `swapOut`/`swapOutTo`. Funds aren't stolen, but become inaccessible through the intended path — recovery would require curator/governance intervention (e.g. re-registering the module, which contradicts the intent of letting it expire) rather than a user-triggered exit.
 

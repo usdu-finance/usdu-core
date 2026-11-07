@@ -1,7 +1,7 @@
-# Deprecated Modules
+# Retired Modules
 
-Registry of USDU minting modules that have been retired. All entries below are marked
-`// set to expire, deprecated` in `exports/address.config.ts` and were confirmed on-chain
+Registry of USDU minting modules that have been retired. All entries below are
+marked as retired (set to expire) in `exports/address.config.ts` and were confirmed on-chain
 against `usduStable.modules(address)` / `checkValidModule(address)` on mainnet
 (`0xdde3eC717f220Fc6A29D6a4Be73F91DA5b718e55`).
 
@@ -18,7 +18,7 @@ historical reference until fully swept.
 | `usduMorphoAdapterV1_1` | `0xab6523Cd7fa669EC35Bd5358dF505382b810CDB5` | 2025-09-30 15:58 | 0 | 0 | 0.00184 USDU |
 | `usduMorphoAdapterV1_2` | `0xFb46481A9819e068Af0EB64a2C2824FCecAAAA45` | 2026-07-30 10:00 (proposed, unix `1785405600`) | 34,938.88 USDU | 34,938.88 USDU | 182.52 USDU |
 
-`V1` and `V1_1` were already fully wound down (zero minted/assets) prior to deprecation.
+`V1` and `V1_1` were already fully wound down (zero minted/assets) prior to retirement.
 `V1_2` was the active adapter (previously `type(uint192).max` expiry, i.e. non-expiring)
 carrying ~34,939 USDU of outstanding minted debt at time of the clean-up decision —
 redeem/reconcile this position down before or as part of expiry.
@@ -45,7 +45,7 @@ active adapter carrying ~22,683 USDU of outstanding minted debt — same wind-do
 | `termmaxVaultAdapterRecoverV1_Yield` | `0x5febEFD5AeCFefB3352c5Edd49d634B1456c4bD7` | 2026-07-30 10:00 (proposed, unix `1785405600`; was 2027-10-09) | 0 | 0 |
 
 All three were already effectively idle (dust-level or zero outstanding debt) at time of
-deprecation — no redemption needed before expiry.
+retirement — no redemption needed before expiry.
 
 ## New expiry proposal
 
@@ -67,6 +67,6 @@ timestamp so no debt is left stranded past validity.
 ## Verification snapshot
 
 Checked against mainnet block `25,531,320` (chain time 2026-07-14 13:55:59 UTC). All three
-groups' non-deprecated members previously returned `checkValidModule == true`; this doc
+groups' non-retired members previously returned `checkValidModule == true`; this doc
 should be updated once the newly-expired entries pass `1785405600` and are re-confirmed as
 `false`.
