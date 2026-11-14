@@ -29,8 +29,12 @@ import {IForeignSwapperV1} from './IForeignSwapperV1.sol';
  *        no oracle: the curator keeps the floor tight and refreshes it, and `maxAmount` bounds exposure per call.
  *        Anyone can sandwich a swap, but only down to that floor.
  *      - Route steps are arbitrary calldata to curator-chosen targets, so the curator is fully trusted (it already
- *        controls the DAO's funds). Defence in depth: a step can never target the swapper or the stablecoin, and
- *        only target the foreign token itself to unwrap a vault share (ERC-4626 redeem / withdraw), steps must chain token to token, and approvals are exact and reset after each step.
+ *        controls the DAO's funds). Defence in depth:
+ *        - a step can never target the swapper or the stablecoin;
+ *        - a step may target the foreign token itself only to unwrap a vault share (ERC-4626 redeem / withdraw) with
+ *          the swapper as both receiver and owner;
+ *        - steps must chain token to token;
+ *        - approvals are exact and reset after each step.
  *      - The guardian may disable a route instantly; only the curator can (re)set one.
  */
 contract ForeignSwapperV1 is IForeignSwapperV1, IStablecoinModifier, ReentrancyGuard {
@@ -148,12 +152,15 @@ contract ForeignSwapperV1 is IForeignSwapperV1, IStablecoinModifier, ReentrancyG
 		}
 	}
 
-	/// @dev ERC-4626 redeem(uint256,address,address) / withdraw(uint256,address,address) only. The shares are burned
-	///      from the swapper itself (owner = msg.sender), so nothing here can spend the DAO's approval.
-	function _isUnwrap(bytes calldata data) internal pure returns (bool) {
-		if (data.length < 100) return false;
+	/// @dev ERC-4626 redeem(uint256,address,address) / withdraw(uint256,address,address) only, with receiver and owner
+	///      both hardcoded to this contract: the shares are burned from the swapper's own balance and the underlying
+	///      lands here, so a vault call can neither spend the DAO's approval nor send value anywhere else.
+	function _isUnwrap(bytes calldata data) internal view returns (bool) {
+		if (data.length != 100) return false;
 		bytes4 sel = bytes4(data[:4]);
-		return sel == 0xba087652 || sel == 0xb460af94;
+		if (sel != 0xba087652 && sel != 0xb460af94) return false;
+		// args: (amount, receiver, owner); the amount is patched live, receiver and owner are fixed
+		return address(uint160(uint256(bytes32(data[36:68])))) == address(this) && address(uint160(uint256(bytes32(data[68:100])))) == address(this);
 	}
 
 	function _run(Step memory s) internal {

@@ -182,5 +182,22 @@ describe('ForeignSwapperV1', function () {
 		await expect(
 			swapper.connect(curator).setRoute(vaultAddr, { ...r, steps: [{ ...r.steps[0], data: tf }, r.steps[1]] }),
 		).to.be.revertedWithCustomError(swapper, 'BadRoute');
+
+		// receiver and owner are hardcoded to the swapper: neither the DAO nor anyone else may appear there
+		const iface = new ethers.Interface(['function redeem(uint256,address,address)', 'function withdraw(uint256,address,address)']);
+		for (const fn of ['redeem', 'withdraw']) {
+			for (const args of [
+				[1n, caller.address, swapperAddr],
+				[1n, swapperAddr, curator.address],
+				[1n, curator.address, curator.address],
+			]) {
+				await expect(
+					swapper.connect(curator).setRoute(vaultAddr, { ...r, steps: [{ ...r.steps[0], data: iface.encodeFunctionData(fn, args) }, r.steps[1]] }),
+				).to.be.revertedWithCustomError(swapper, 'BadRoute');
+			}
+		}
+		// withdraw with the swapper as receiver and owner is accepted
+		const wd = iface.encodeFunctionData('withdraw', [1n, swapperAddr, swapperAddr]);
+		await swapper.connect(curator).setRoute(vaultAddr, { ...r, steps: [{ ...r.steps[0], data: wd }, r.steps[1]] });
 	});
 });
