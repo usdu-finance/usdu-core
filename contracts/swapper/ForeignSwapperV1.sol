@@ -29,7 +29,9 @@ import {IForeignSwapperV1} from './IForeignSwapperV1.sol';
  *        no oracle: the curator keeps the floor tight and refreshes it, and `maxAmount` bounds exposure per call.
  *        Anyone can sandwich a swap, but only down to that floor.
  *      - Route steps are arbitrary calldata to curator-chosen targets, so the curator is fully trusted (it already
- *        controls the DAO's funds). Defence in depth:
+ *        controls the DAO's funds). The checks below are a guard against route mistakes, not a guarantee against a
+ *        malicious curator: they cover the swapper, the stablecoin and the route's own foreign token, but not other
+ *        tokens the DAO has approved to this contract for other routes (a step could call `transferFrom` on those).
  *        - a step can never target the swapper or the stablecoin;
  *        - a step may target the foreign token itself only to unwrap a vault share (ERC-4626 redeem / withdraw) with
  *          the swapper as both receiver and owner;
@@ -78,7 +80,8 @@ contract ForeignSwapperV1 is IForeignSwapperV1, IStablecoinModifier, ReentrancyG
 
 		for (uint256 i = 0; i < n; ++i) {
 			Step calldata s = route.steps[i];
-			// the target gets an exact approval and calldata: it must never be able to touch the DAO's approvals
+			// the target gets an exact approval and calldata: block the obvious ways to reach the DAO's approvals
+			// (the swapper, the stablecoin). Other approved tokens are not checked, the curator is trusted
 			if (s.target == address(this) || s.target == address(stable)) revert BadRoute();
 			// the one legitimate call into the foreign token itself is unwrapping a vault share (ERC-4626)
 			if (s.target == token && !_isUnwrap(s.data)) revert BadRoute();

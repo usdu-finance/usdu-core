@@ -13,33 +13,33 @@
 |----------|-------|
 | Critical | 0 |
 | High     | 0 |
-| Medium   | 1 |
+| Medium   | 0 |
 | Low      | 3 |
-| Info     | 5 |
+| Info     | 6 |
 
 ---
 
 ## Findings
 
-### [M-01] Price protection is a static curator-set floor; value up to the floor is extractable per call  *(Medium)*
-**Location:** `ForeignSwapperV1.sol:107-137` (`swap`), `Route.minRate`  
-**Description:** `swap` is permissionless and there is no oracle, so a caller (or a searcher around them) chooses *when* the route runs. A caller can move the underlying pools against the route in the same block, trigger `swap`, and unwind, keeping the difference between the true rate and `minRate`. The loss is bounded by `minRate` and `maxAmount` per call, but nothing bounds the number of calls, and a floor that is not refreshed after the market moves leaves the whole gap open. This is a documented design choice, but it is the main economic risk of the contract.  
-**Recommendation:** Operationally: set `maxAmount` so one call is a tolerable loss, set `minRate` tight (a fraction of a percent below the live rate) and refresh it on a schedule or after material moves. For routes through thin pools, consider sending through a private mempool or having the keeper be the only practical caller. Optionally add a per-route cooldown (`minInterval`) so a single bad block cannot be repeated back to back.
-
-### [L-01] Routes survive a curator change  *(Low)*
+### [L-01] Routes survive a curator change  *(Low, accepted)*
 **Location:** `ForeignSwapperV1.sol:59, 114` (`stable.curator()` resolved at call time), `_routes` storage  
 **Description:** The sweep destination follows the current curator, but routes configured by the previous curator stay enabled. If the curator rotates and the new DAO approves the swapper for a token that still has an old route, `swap` runs the previous curator's targets and `minRate` against the new DAO's funds, with no re-review.  
 **Recommendation:** Store the curator that set each route and require it to equal `stable.curator()` in `swap`/`swappable`, or document that a curator handover must be followed by `disableRoute` for every route and a fresh `setRoute`.
 
-### [L-02] Defence-in-depth target check only covers the route's own foreign token  *(Low)*
+### [L-02] Defence-in-depth target check only covers the route's own foreign token  *(Low, comment fixed)*
 **Location:** `ForeignSwapperV1.sol:78-84`  
 **Description:** `setRoute` rejects `target == swapper`, `target == stable` and non-unwrap calls into the route's own `token`. A step can still target another token the DAO has approved to the swapper for a different route (or `tokenOut` / an intermediate) with `transferFrom(dao, recipient, amount)` calldata and spend that allowance. The contract comment presents the checks as preventing the route from touching the DAO's approvals, which is not fully true. This needs the curator, who already controls the DAO, so it is not a privilege escalation.  
 **Recommendation:** Either reject any step whose `target` is a token used anywhere in the route or that has an approval from the DAO, or soften the comment so it does not imply a guarantee. A cheap partial improvement is to reject targets equal to `route.tokenOut` and to any step's `tokenIn`/`tokenOut` other than the single allowed unwrap.
 
-### [L-03] `RouteSet` does not emit the steps  *(Low)*
+### [L-03] `RouteSet` does not emit the steps  *(Low, accepted)*
 **Location:** `ForeignSwapperV1.sol:95`, `IForeignSwapperV1.sol` `RouteSet`  
 **Description:** Targets and calldata are the security-relevant part of a route, but the event carries only token, tokenOut and limits. Monitoring and the history of what a route did at a given time have to be reconstructed from calldata of `setRoute` transactions.  
 **Recommendation:** Emit the steps (or a hash of them) in `RouteSet` so watchers can alert on changes to targets.
+
+### [I-00] Price protection is a static `minRate` floor  *(Info, was Medium)*
+**Location:** `ForeignSwapperV1.sol:107-137` (`swap`), `Route.minRate`  
+**Description:** `swap` is permissionless and there is no oracle, so a caller chooses *when* the route runs. For routes made only of the ecosystem's own modules (swap routers, bridges, vault redemptions) the rate is set by fixed module fees, there is no pool price to move, and nothing can be extracted between the live rate and the floor; the floor then only guards against a misconfigured or changed module. The sandwich concern applies only if a route includes an AMM (e.g. a Curve pool) or an external aggregator, where a caller can skew the pool in the same block and keep the gap up to `minRate`.  
+**Recommendation:** Keep routes to own modules, as intended. If a route ever includes an AMM or aggregator step, set `maxAmount` and a tight `minRate` for it and refresh the floor. Re-check the floor if a module's fee changes.
 
 ### [I-01] ERC-4626 unwrap restriction (change under review)  *(Info)*
 **Location:** `ForeignSwapperV1.sol:158-164`  
