@@ -81,6 +81,13 @@ export const ADDRESS: ChainAddressMap = {
 		// https://etherscan.io/address/0xB82D2dC575D815C282e8280952919A2A1CF0D3F2
 		zapperSwapEnsoV1: '0xB82D2dC575D815C282e8280952919A2A1CF0D3F2',
 
+		// #######
+		// swapper
+		// #######
+		// permissionless conversion of DAO-held foreign tokens along curator-set routes (stable: USDU)
+		// https://etherscan.io/address/0x2d4f152a7a789936EeA3A08B668be8AB11620790
+		foreignSwapperV1: '0x2d4f152a7a789936EeA3A08B668be8AB11620790',
+
 		// ##################
 		// external protocols
 		// ##################
