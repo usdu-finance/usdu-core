@@ -10,7 +10,7 @@ import {ITwocrypto} from './helpers/ITwocrypto.sol';
 
 /**
  * @title CurveSeedAdapterV1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice Curator-only seeding utility for a fixed, deploy-time allowlist of Curve TwoCrypto-NG pools
  *         pairing USDU (always coin(0)) with another protocol stablecoin (e.g. EURU or CHFU, coin(1)).
  *         A single instance manages every allowlisted pool, keyed by pool address, so it doubles as

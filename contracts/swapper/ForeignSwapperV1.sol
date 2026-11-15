@@ -12,7 +12,7 @@ import {IForeignSwapperV1} from './IForeignSwapperV1.sol';
 
 /**
  * @title ForeignSwapperV1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice Turns "foreign" tokens held by the DAO (USDT, USDC, ZCHF, dEURO, ...) into ecosystem tokens without the
  *         DAO having to act each time. The DAO (the stablecoin's curator) approves this contract for a foreign
  *         token and configures a route for it; from then on anyone may call `swap(token)`, which pulls the DAO's

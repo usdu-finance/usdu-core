@@ -15,7 +15,7 @@ import {ISwapBridgeMorphoV1} from './ISwapBridgeMorphoV1.sol';
 
 /**
  * @title SwapBridgeMorphoV1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice A stablecoin bridge for a trusted source coin (e.g. USDC): swapping in mints stablecoin 1:1 minus a
  *         fee and puts the coin to work in an ERC4626 vault (e.g. a Morpho Vault V2); swapping out redeems the
  *         position and burns the stablecoin, taking its fee in coin rather than minting. Both swap directions

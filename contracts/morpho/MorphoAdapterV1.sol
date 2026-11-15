@@ -14,7 +14,7 @@ import {IMetaMorphoV1_1} from './helpers/IMetaMorphoV1_1.sol';
 
 /**
  * @title MorphoAdapterV1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice This is an adapter for interacting with Morpho to mint liquidity straight into the market.
  */
 contract MorphoAdapterV1 is Context {

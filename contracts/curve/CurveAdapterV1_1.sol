@@ -13,7 +13,7 @@ import {ICurveStableSwapNG} from './helpers/ICurveStableSwapNG.sol';
 
 /**
  * @title CurveAdapterV1_1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice This is an adapter for interacting with ICurveStableSwapNG to mint liquidity straight into the pool under certain conditions.
  */
 contract CurveAdapterV1_1 is RewardDistributionV1 {

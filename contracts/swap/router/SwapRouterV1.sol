@@ -14,7 +14,7 @@ import {ISwapRouterV1} from './ISwapRouterV1.sol';
 
 /**
  * @title SwapRouterV1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice A stateless, non-custodial entrypoint for swapping through any ISwapBridgeV1 module registered on
  *         `stable`: the caller picks the module per call, so plugging in a new swap module (a new coin, a new
  *         backing venue) is just the curator registering it on the stablecoin as usual - no change or upgrade

@@ -11,7 +11,7 @@ import {RewardDistributionV1, IStablecoinMetadata} from '../reward/RewardDistrib
 
 /**
  * @title VaultAdapterV1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice This contract serves as an adapter for interacting with vaults, facilitating the direct minting of liquidity into them.
  */
 contract VaultAdapterV1 is RewardDistributionV1 {

@@ -8,7 +8,7 @@ import {IStablecoinModifier, IStablecoinMetadata} from '../stablecoin/IStablecoi
 import {IModuleRevenueV1} from './IModuleRevenueV1.sol';
 
 /// @title ModuleRevenueV1
-/// @author @samclassix <samclassix@proton.me>
+/// @author @samclassix <integration@usdu.finance>
 /// @notice Abstract module implementing the minting/accounting bookkeeping side of IModuleRevenueV1. Tracks
 ///         totalMinted and totalRevenue, with new principal-backed issuance (via _mintWithCap) bounded by an
 ///         immutable mintCap set at construction — totalMinted itself can still exceed mintCap once revenue

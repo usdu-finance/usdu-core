@@ -13,7 +13,7 @@ import {ICurveStableSwapNG} from './helpers/ICurveStableSwapNG.sol';
 
 /**
  * @title CurveAdapterV1_2
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice Enhanced Curve StableSwapNG adapter enabling dual-sided liquidity provision with automated profit reconciliation.
  *         Maintains simple accounting (Assets = LP value via virtual price, Liabilities = totalMinted) while providing
  *         protocol-level profit tracking and distribution capabilities.

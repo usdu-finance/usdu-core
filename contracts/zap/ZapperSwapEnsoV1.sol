@@ -16,7 +16,7 @@ import {IZapperSwapEnsoV1} from './IZapperSwapEnsoV1.sol';
 
 /**
  * @title ZapperSwapEnsoV1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice One-transaction entry into the USDU stablecoins and their reward vaults from any token. The caller
  *         (off-chain) supplies the route as an ordered list of steps: an optional call to the Enso router that
  *         turns an arbitrary token into an entry coin, followed by native hops through the swap modules, Curve

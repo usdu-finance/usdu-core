@@ -8,7 +8,7 @@ import {IModuleExpenseV1} from './IModuleExpenseV1.sol';
 // TODO: verify code and evtl bug fixes
 
 /// @title ModuleExpenseV1
-/// @author @samclassix <samclassix@proton.me>
+/// @author @samclassix <integration@usdu.finance>
 /// @notice Abstract module implementing the expense bookkeeping side of IModuleExpenseV1. Tracks totalExpense
 ///         and offers a fundsCap guard; totalFunds is left to the concrete module, since only it knows how
 ///         its own held/deployed funds are valued.

@@ -9,7 +9,7 @@ import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IStablecoin} from '../stablecoin/IStablecoin.sol';
 
 /// @title RewardRouterV0 - Non-custodial Router
-/// @author @samclassix <samclassix@proton.me>
+/// @author @samclassix <integration@usdu.finance>
 /// @notice This contract acts purely as a non-custodial router, helping connect on-chain deposits with the off-chain reward program.
 contract RewardRouterV0 {
 	using Math for uint256;

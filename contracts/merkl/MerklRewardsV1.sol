@@ -11,7 +11,7 @@ import {IMerklDistributor} from './helpers/IMerklDistributor.sol';
 
 /**
  * @title MerklRewardsV1
- * @author @samclassix <samclassix@proton.me>
+ * @author @samclassix <integration@usdu.finance>
  * @notice Abstract module giving a vault adapter the ability to claim its Merkl-distributed incentives and
  *         forward them straight to the stablecoin curator. Claimed tokens are curator-selected and never
  *         retained by the adapter, so an adapter integrating this module takes on no custody risk from
