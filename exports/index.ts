@@ -82,6 +82,10 @@ export * from './abis/swap/morpho/ISwapBridgeMorphoV1';
 export * from './abis/swap/router/SwapRouterV1';
 export * from './abis/swap/router/ISwapRouterV1';
 
+// swapper abis
+export * from './abis/swapper/ForeignSwapperV1';
+export * from './abis/swapper/IForeignSwapperV1';
+
 // termmax abis
 export * from './abis/termmax/ITermMaxVault';
 

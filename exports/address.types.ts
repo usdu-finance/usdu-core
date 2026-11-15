@@ -104,6 +104,11 @@ export type ChainAddressMainnet = {
 	// ######
 	zapperSwapEnsoV1: Address;
 
+	// #######
+	// swapper
+	// #######
+	foreignSwapperV1: Address;
+
 	// ##################
 	// external protocols
 	// ##################
