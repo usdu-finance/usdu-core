@@ -5,28 +5,46 @@ import {IStablecoinModifier, IStablecoinMetadata} from '../stablecoin/IStablecoi
 
 import {IModuleExpenseV1} from './IModuleExpenseV1.sol';
 
-// TODO: verify code and evtl bug fixes
-
 /// @title ModuleExpenseV1
 /// @author @samclassix <integration@usdu.finance>
 /// @notice Abstract module implementing the expense bookkeeping side of IModuleExpenseV1. Tracks totalExpense
-///         and offers a fundsCap guard; totalFunds is left to the concrete module, since only it knows how
+///         and offers two guards: a fundsCap on what the module holds and a flowCap on what it pays out per
+///         flowPeriod; totalFunds is left to the concrete module, since only it knows how
 ///         its own held/deployed funds are valued.
 abstract contract ModuleExpenseV1 is IStablecoinModifier, IModuleExpenseV1 {
 	/// @notice Thrown when funding would push totalFunds above fundsCap.
 	error FundsCapExceeded(uint256 requested, uint256 cap);
 
-	/// @notice Emitted when an expense (e.g. interest/coupon) is paid out.
-	event Expense(uint256 amount, uint256 totalExpense, uint256 totalFunds);
+	/// @notice Thrown when an expense would push the current window's payouts above flowCap.
+	error FlowCapExceeded(uint256 requested, uint256 available);
+
+	error ZeroFlowPeriod();
 
 	uint256 public immutable fundsCap;
+	uint256 public immutable flowCap;
+	uint256 public immutable flowPeriod;
 
 	uint256 public totalExpense;
 
+	/// @dev Window the payouts in `flowExpense` belong to (`block.timestamp / flowPeriod`)
+	uint256 private flowEpoch;
+	uint256 private flowExpense;
+
 	// ---------------------------------------------------------------------------------------
 
-	constructor(IStablecoinMetadata _stable, uint256 _fundsCap) IStablecoinModifier(_stable) {
+	constructor(IStablecoinMetadata _stable, uint256 _fundsCap, uint256 _flowCap, uint256 _flowPeriod) IStablecoinModifier(_stable) {
+		if (_flowPeriod == 0) revert ZeroFlowPeriod();
 		fundsCap = _fundsCap;
+		flowCap = _flowCap;
+		flowPeriod = _flowPeriod;
+	}
+
+	// ---------------------------------------------------------------------------------------
+
+	/// @inheritdoc IModuleExpenseV1
+	function flowAvailable() public view returns (uint256) {
+		uint256 spent = block.timestamp / flowPeriod == flowEpoch ? flowExpense : 0;
+		return spent >= flowCap ? 0 : flowCap - spent;
 	}
 
 	// ---------------------------------------------------------------------------------------
@@ -37,10 +55,18 @@ abstract contract ModuleExpenseV1 is IStablecoinModifier, IModuleExpenseV1 {
 		if (newTotalFunds > fundsCap) revert FundsCapExceeded(newTotalFunds, fundsCap);
 	}
 
-	/// @dev Pays `amount` as a protocol-funded expense (e.g. interest/coupon) to `to`.
+	/// @dev Pays `amount` as a protocol-funded expense (e.g. interest/coupon) to `to`. Reverts if it would push the
+	///      current window's payouts above flowCap. Fixed windows allow up to 2x flowCap across a window boundary.
 	function _expense(address to, uint256 amount) internal {
+		uint256 available = flowAvailable();
+		if (amount > available) revert FlowCapExceeded(amount, available);
+
+		uint256 epoch = block.timestamp / flowPeriod;
+		flowExpense = (epoch == flowEpoch ? flowExpense : 0) + amount;
+		flowEpoch = epoch;
+
 		totalExpense += amount;
 		stable.mintModule(to, amount);
-		emit Expense(amount, totalExpense, this.totalFunds());
+		emit Expense(address(stable), to, amount, totalExpense, this.totalFunds());
 	}
 }

@@ -109,6 +109,11 @@ export type ChainAddressMainnet = {
 	// #######
 	foreignSwapperV1: Address;
 
+	// #########
+	// depositor
+	// #########
+	streamerDepositorV1: Address;
+
 	// ##################
 	// external protocols
 	// ##################

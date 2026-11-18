@@ -74,6 +74,8 @@ export * from './abis/zap/IZapperSwapEnsoV1';
 
 // streamer abis
 export * from './abis/streamer/StreamerVaultV1';
+export * from './abis/streamer/StreamerDepositorV1';
+export * from './abis/streamer/IStreamerDepositorV1';
 
 // swap abis
 export * from './abis/swap/general/ISwapBridgeV1';

@@ -2,20 +2,52 @@ export const ModuleExpenseV1_ABI = [
 	{
 		inputs: [
 			{ internalType: 'uint256', name: 'requested', type: 'uint256' },
+			{ internalType: 'uint256', name: 'available', type: 'uint256' },
+		],
+		name: 'FlowCapExceeded',
+		type: 'error',
+	},
+	{
+		inputs: [
+			{ internalType: 'uint256', name: 'requested', type: 'uint256' },
 			{ internalType: 'uint256', name: 'cap', type: 'uint256' },
 		],
 		name: 'FundsCapExceeded',
 		type: 'error',
 	},
+	{ inputs: [], name: 'ZeroFlowPeriod', type: 'error' },
 	{
 		anonymous: false,
 		inputs: [
+			{ indexed: true, internalType: 'address', name: 'token', type: 'address' },
+			{ indexed: true, internalType: 'address', name: 'to', type: 'address' },
 			{ indexed: false, internalType: 'uint256', name: 'amount', type: 'uint256' },
 			{ indexed: false, internalType: 'uint256', name: 'totalExpense', type: 'uint256' },
 			{ indexed: false, internalType: 'uint256', name: 'totalFunds', type: 'uint256' },
 		],
 		name: 'Expense',
 		type: 'event',
+	},
+	{
+		inputs: [],
+		name: 'flowAvailable',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'flowCap',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'flowPeriod',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
 	},
 	{
 		inputs: [],
@@ -27,7 +59,7 @@ export const ModuleExpenseV1_ABI = [
 	{
 		inputs: [],
 		name: 'stable',
-		outputs: [{ internalType: 'contract Stablecoin', name: '', type: 'address' }],
+		outputs: [{ internalType: 'contract IStablecoinMetadata', name: '', type: 'address' }],
 		stateMutability: 'view',
 		type: 'function',
 	},
