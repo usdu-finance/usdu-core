@@ -16,9 +16,6 @@ abstract contract ModuleExpenseV1 is IStablecoinModifier, IModuleExpenseV1 {
 	/// @notice Thrown when funding would push totalFunds above fundsCap.
 	error FundsCapExceeded(uint256 requested, uint256 cap);
 
-	/// @notice Emitted when an expense (e.g. interest/coupon) is paid out.
-	event Expense(uint256 amount, uint256 totalExpense, uint256 totalFunds);
-
 	uint256 public immutable fundsCap;
 
 	uint256 public totalExpense;
@@ -41,6 +38,6 @@ abstract contract ModuleExpenseV1 is IStablecoinModifier, IModuleExpenseV1 {
 	function _expense(address to, uint256 amount) internal {
 		totalExpense += amount;
 		stable.mintModule(to, amount);
-		emit Expense(amount, totalExpense, this.totalFunds());
+		emit Expense(address(stable), to, amount, totalExpense, this.totalFunds());
 	}
 }

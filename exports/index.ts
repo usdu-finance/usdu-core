@@ -25,6 +25,7 @@ export * from './abis/module/ModuleRevenueV1';
 export * from './abis/module/IModuleRevenueV1';
 export * from './abis/module/ModuleExpenseV1';
 export * from './abis/module/IModuleExpenseV1';
+export * from './abis/module/IModuleExpenseEventsV1';
 
 // morpho abis
 export * from './abis/morpho/MorphoAdapterV1';
@@ -74,6 +75,8 @@ export * from './abis/zap/IZapperSwapEnsoV1';
 
 // streamer abis
 export * from './abis/streamer/StreamerVaultV1';
+export * from './abis/streamer/StreamerDepositorV1';
+export * from './abis/streamer/IStreamerDepositorV1';
 
 // swap abis
 export * from './abis/swap/general/ISwapBridgeV1';
