@@ -11,6 +11,10 @@ import {IModuleExpenseV1} from './IModuleExpenseV1.sol';
 ///         and offers two guards: a fundsCap on what the module holds and a flowCap on what it pays out per
 ///         flowPeriod; totalFunds is left to the concrete module, since only it knows how
 ///         its own held/deployed funds are valued.
+/// @dev DRAFT: no contract uses this yet, and the flow cap in particular has no test. Paying expenses by minting
+///      (`_expense` mints via `mintModule`) is not settled as the right model, so expect this to change or to be
+///      dropped. Do not build on it before it is reviewed and covered by tests. StreamerDepositorV1 deliberately does
+///      not use it (it spends the DAO's existing balance); it only shares the `Expense` event.
 abstract contract ModuleExpenseV1 is IStablecoinModifier, IModuleExpenseV1 {
 	/// @notice Thrown when funding would push totalFunds above fundsCap.
 	error FundsCapExceeded(uint256 requested, uint256 cap);
