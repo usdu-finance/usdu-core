@@ -25,7 +25,6 @@ export * from './abis/module/ModuleRevenueV1';
 export * from './abis/module/IModuleRevenueV1';
 export * from './abis/module/ModuleExpenseV1';
 export * from './abis/module/IModuleExpenseV1';
-export * from './abis/module/IModuleExpenseEventsV1';
 
 // morpho abis
 export * from './abis/morpho/MorphoAdapterV1';

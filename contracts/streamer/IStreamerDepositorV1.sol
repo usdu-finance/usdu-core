@@ -10,12 +10,10 @@ interface IStreamerVaultLike {
 	function sync() external;
 }
 
-import {IModuleExpenseEventsV1} from '../module/IModuleExpenseEventsV1.sol';
-
 /// @title IStreamerDepositorV1
 /// @notice Surface of StreamerDepositorV1: on a fixed cadence, moves a capped percentage of the DAO's (the curator's)
 ///         balance of a stablecoin straight into that coin's StreamerVaultV1, callable by anyone.
-interface IStreamerDepositorV1 is IModuleExpenseEventsV1 {
+interface IStreamerDepositorV1 {
 	/// @param enabled Whether anyone may currently trigger deposits for this token.
 	/// @param vault StreamerVaultV1 funded with this token; its `asset()` must be the token.
 	/// @param bps Share of the DAO's token balance deposited per period, in basis points (100 = 1%).
@@ -36,7 +34,10 @@ interface IStreamerDepositorV1 is IModuleExpenseEventsV1 {
 
 	event FlowSet(address indexed token, address indexed vault, uint16 bps, uint64 cooldown, uint256 flowCap);
 	event FlowDisabled(address indexed token);
-	// each deposit emits `Expense(token, vault, amount, totalDeposited, daoBalanceLeft)`, see IModuleExpenseEventsV1
+	/// @dev Same signature as `IModuleExpenseV1.Expense`, emitted on every deposit as
+	///      `Expense(token, vault, amount, totalDeposited, daoBalanceLeft)`. Not inherited, as this contract has no
+	///      single totalFunds / fundsCap to implement the rest of that interface.
+	event Expense(address indexed token, address indexed to, uint256 amount, uint256 totalExpense, uint256 totalFunds);
 
 	error BadFlow();
 	error FlowNotEnabled(address token);

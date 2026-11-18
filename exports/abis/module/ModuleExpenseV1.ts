@@ -2,11 +2,20 @@ export const ModuleExpenseV1_ABI = [
 	{
 		inputs: [
 			{ internalType: 'uint256', name: 'requested', type: 'uint256' },
+			{ internalType: 'uint256', name: 'available', type: 'uint256' },
+		],
+		name: 'FlowCapExceeded',
+		type: 'error',
+	},
+	{
+		inputs: [
+			{ internalType: 'uint256', name: 'requested', type: 'uint256' },
 			{ internalType: 'uint256', name: 'cap', type: 'uint256' },
 		],
 		name: 'FundsCapExceeded',
 		type: 'error',
 	},
+	{ inputs: [], name: 'ZeroFlowPeriod', type: 'error' },
 	{
 		anonymous: false,
 		inputs: [
@@ -18,6 +27,27 @@ export const ModuleExpenseV1_ABI = [
 		],
 		name: 'Expense',
 		type: 'event',
+	},
+	{
+		inputs: [],
+		name: 'flowAvailable',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'flowCap',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
+	},
+	{
+		inputs: [],
+		name: 'flowPeriod',
+		outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+		stateMutability: 'view',
+		type: 'function',
 	},
 	{
 		inputs: [],
