@@ -88,6 +88,13 @@ export const ADDRESS: ChainAddressMap = {
 		// https://etherscan.io/address/0x2d4f152a7a789936EeA3A08B668be8AB11620790
 		foreignSwapperV1: '0x2d4f152a7a789936EeA3A08B668be8AB11620790',
 
+		// #########
+		// depositor
+		// #########
+		// permissionless, cooldown-gated deposits of a capped share of the DAO's stablecoin balance into the reward vaults (stable: USDU)
+		// https://etherscan.io/address/0x5f42Be75Df692D97356BFedF01FD72e3Ab57123D
+		streamerDepositorV1: '0x5f42Be75Df692D97356BFedF01FD72e3Ab57123D',
+
 		// ##################
 		// external protocols
 		// ##################
